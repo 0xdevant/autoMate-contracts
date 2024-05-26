@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
@@ -9,10 +9,14 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {BaseHook} from "./forks/BaseHook.sol";
 
-contract AutoMateHook is IAutoMateHook, ERC1155 {
+contract AutoMateHook is BaseHook {
     using CurrencySettleTake for Currency;
 
-    constructor(IPoolManager poolManager) BaseHook(poolManager) {}
+    address public immutable autoMate;
+
+    constructor(IPoolManager poolManager, address _autoMate) BaseHook(poolManager) {
+        autoMate = _autoMate;
+    }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
