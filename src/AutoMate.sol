@@ -32,7 +32,7 @@ contract AutoMate is Ownable, IAutoMate {
         protocolFeeBP = protocolFeeBP;
     }
 
-    function subscribe(Task calldata task, TaskInput calldata taskInput) external payable {
+    function subscribeTask(Task calldata task, TaskInput calldata taskInput) external payable {
         if (task.intervalInSecs > MAX_INTERVAL_IN_SECS) {
             revert ExceedsMaxInterval();
         }
@@ -55,7 +55,7 @@ contract AutoMate is Ownable, IAutoMate {
         emit TaskSubscribed(msg.sender, taskId);
     }
 
-    function triggerTask(uint256 taskId) external onlyFromHook {
+    function executeTask(uint256 taskId) external onlyFromHook {
         Task memory task = _tasks[taskId];
 
         // execute the task

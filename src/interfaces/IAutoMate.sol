@@ -34,8 +34,8 @@ interface IAutoMate {
     error InsufficientFunds();
     error TaskFailed(bytes data);
 
-    function subscribe(Task calldata task, TaskInput calldata taskInput) external payable;
-    function triggerTask(uint256 taskId) external;
+    function subscribeTask(Task calldata task, TaskInput calldata taskInput) external payable;
+    function executeTask(uint256 taskId) external;
 
     function getTaskId(
         address subscriber,
