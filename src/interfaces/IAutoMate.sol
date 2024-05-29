@@ -5,26 +5,21 @@ interface IAutoMate {
     enum TaskType {
         NATIVE_TRANSFER,
         ERC20_TRANSFER,
-        ERC721_TRANSFER,
-        ERC1155_TRANSFER,
         CONTRACT_CALL
     }
 
+    // if intervalInHours == lastForInHours, then it's a one-time task
     struct Task {
+        uint256 id;
         address subscriber;
-        address callingContract;
-        uint32 intervalInSecs;
-        uint40 startTs;
-        bool isRecurring;
-        uint256 values;
-        bytes callData;
-    }
-
-    struct TaskInput {
         TaskType taskType;
-        uint256 tokenId;
-        uint256 totalAmount;
-        bytes signature;
+        address callingContract;
+        uint40 startTs;
+        uint16 intervalInHours;
+        uint16 lastForInHours;
+        uint256 totalAmounts;
+        uint256 totalValues;
+        bytes callData;
     }
 
     event TaskSubscribed(address indexed subscriber, uint256 taskId);
@@ -34,18 +29,9 @@ interface IAutoMate {
     error InsufficientFunds();
     error TaskFailed(bytes data);
 
-    function subscribeTask(Task calldata task, TaskInput calldata taskInput) external payable;
+    function subscribeTask(bytes memory taskInfo) external payable returns (uint256 taskId);
     function executeTask(uint256 taskId) external;
 
-    function getTaskId(
-        address subscriber,
-        uint32 intervalInSecs,
-        uint40 startTs,
-        bool isRecurring,
-        uint256 values,
-        bytes calldata callData
-    ) external pure returns (uint256);
     function getTask(uint256 taskId) external view returns (Task memory);
-    function getSubscribersTaskIds(address subscriber) external view returns (uint256[] memory);
     function getProtocolFeeBP() external view returns (uint16);
 }

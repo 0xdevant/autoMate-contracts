@@ -3,19 +3,18 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 import {IAutoMate} from "./interfaces/IAutoMate.sol";
 
 contract AutoMate is Ownable, IAutoMate {
     using SafeERC20 for IERC20;
 
-    uint256 constant MAX_INTERVAL_IN_SECS = 365 days;
+    // only allow at most monthly task to be scheduled
+    uint256 constant MAX_INTERVAL_IN_HOURS = 720;
     uint256 constant BASIS_POINTS = 10000;
 
-    mapping(uint256 taskId => Task) private _tasks;
-    mapping(address subscriber => uint256[] taskId) private _subscribersTaskIds;
+    Task[] private _tasks;
 
     address private _hookAddress;
     uint16 private _protocolFeeBP;
@@ -32,25 +31,39 @@ contract AutoMate is Ownable, IAutoMate {
         protocolFeeBP = protocolFeeBP;
     }
 
-    function subscribeTask(Task calldata task, TaskInput calldata taskInput) external payable {
-        if (task.intervalInSecs > MAX_INTERVAL_IN_SECS) {
+    function subscribeTask(bytes memory taskInfo) external payable returns (uint256 taskId) {
+        (
+            TaskType taskType,
+            address callingContract,
+            uint40 startTs,
+            uint16 intervalInHours,
+            uint16 lastForInHours,
+            uint256 totalAmounts,
+            uint256 totalValues,
+            bytes memory callData
+        ) = abi.decode(taskInfo, (TaskType, address, uint40, uint16, uint16, uint256, uint256, bytes));
+        if (intervalInHours > MAX_INTERVAL_IN_HOURS) {
             revert ExceedsMaxInterval();
         }
 
-        uint256 taskId =
-            getTaskId(msg.sender, task.intervalInSecs, task.startTs, task.isRecurring, task.values, task.callData);
-        _tasks[taskId] = Task(
+        taskId = _tasks.length;
+        Task memory task = Task(
+            taskId,
             msg.sender,
-            task.callingContract,
-            task.intervalInSecs,
-            task.startTs,
-            task.isRecurring,
-            task.values,
-            task.callData
+            taskType,
+            callingContract,
+            startTs,
+            intervalInHours,
+            lastForInHours,
+            totalAmounts,
+            totalValues,
+            callData
         );
-        _subscribersTaskIds[msg.sender].push(taskId);
+        _tasks.push(task);
 
-        _setupForTask(task.callingContract, taskInput);
+        // TODO: make use of Oracle to take protocol fee in USD term from totalAmounts / totalValues, to compensate for the custom price curve
+
+        _setupForTask(taskType, callingContract, totalAmounts, totalValues);
 
         emit TaskSubscribed(msg.sender, taskId);
     }
@@ -65,8 +78,9 @@ contract AutoMate is Ownable, IAutoMate {
         }
 
         // remove the task if it's not a recurring task
-        if (!task.isRecurring) {
-            delete _tasks[taskId];
+        if (task.intervalInHours == task.lastForInHours) {
+            _tasks[taskId] = _tasks[_tasks.length - 1];
+            _tasks.pop();
         }
     }
 
@@ -74,22 +88,16 @@ contract AutoMate is Ownable, IAutoMate {
                                INTERNALS
     //////////////////////////////////////////////////////////////*/
     /// @dev setup all the prerequisites in order for the scheduled task to execute successfully
-    function _setupForTask(address callingContract, TaskInput calldata taskInput) internal {
-        if (taskInput.taskType == TaskType.NATIVE_TRANSFER) {
-            if (msg.value < taskInput.totalAmount) {
+    function _setupForTask(TaskType taskType, address callingContract, uint256 totalAmounts, uint256 totalValues)
+        internal
+    {
+        if (taskType == TaskType.NATIVE_TRANSFER) {
+            if (msg.value < totalValues) {
                 revert InsufficientFunds();
             }
         }
-        if (taskInput.taskType == TaskType.ERC20_TRANSFER) {
-            IERC20(callingContract).safeTransferFrom(msg.sender, address(this), taskInput.totalAmount);
-        }
-        if (taskInput.taskType == TaskType.ERC721_TRANSFER) {
-            IERC721(callingContract).safeTransferFrom(msg.sender, address(this), taskInput.totalAmount);
-        }
-        if (taskInput.taskType == TaskType.ERC1155_TRANSFER) {
-            IERC1155(callingContract).safeTransferFrom(
-                msg.sender, address(this), taskInput.tokenId, taskInput.totalAmount, ""
-            );
+        if (taskType == TaskType.ERC20_TRANSFER) {
+            IERC20(callingContract).safeTransferFrom(msg.sender, address(this), totalAmounts);
         }
     }
 
@@ -107,24 +115,8 @@ contract AutoMate is Ownable, IAutoMate {
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
     //////////////////////////////////////////////////////////////*/
-
-    function getTaskId(
-        address subscriber,
-        uint32 intervalInSecs,
-        uint40 startTs,
-        bool isRecurring,
-        uint256 values,
-        bytes calldata callData
-    ) public pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(subscriber, intervalInSecs, startTs, isRecurring, values, callData)));
-    }
-
     function getTask(uint256 taskId) external view override returns (Task memory) {
         return _tasks[taskId];
-    }
-
-    function getSubscribersTaskIds(address subscriber) external view override returns (uint256[] memory) {
-        return _subscribersTaskIds[subscriber];
     }
 
     function getProtocolFeeBP() external view returns (uint16) {
