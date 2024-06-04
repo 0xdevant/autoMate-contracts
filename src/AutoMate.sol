@@ -35,13 +35,12 @@ contract AutoMate is Ownable, IAutoMate {
         (
             TaskType taskType,
             address callingContract,
-            uint40 startTs,
             uint16 intervalInHours,
             uint16 lastForInHours,
             uint256 totalAmounts,
             uint256 totalValues,
             bytes memory callData
-        ) = abi.decode(taskInfo, (TaskType, address, uint40, uint16, uint16, uint256, uint256, bytes));
+        ) = abi.decode(taskInfo, (TaskType, address, uint16, uint16, uint256, uint256, bytes));
         if (intervalInHours > MAX_INTERVAL_IN_HOURS) {
             revert ExceedsMaxInterval();
         }
@@ -52,7 +51,7 @@ contract AutoMate is Ownable, IAutoMate {
             msg.sender,
             taskType,
             callingContract,
-            startTs,
+            0, // lastRunTs
             intervalInHours,
             lastForInHours,
             totalAmounts,
@@ -68,6 +67,7 @@ contract AutoMate is Ownable, IAutoMate {
         emit TaskSubscribed(msg.sender, taskId);
     }
 
+    /// @dev the execution time won't be exact, with at max 1 hour delay depends on how the Dutch auction goes
     function executeTask(uint256 taskId) external onlyFromHook {
         Task memory task = _tasks[taskId];
 
@@ -115,6 +115,10 @@ contract AutoMate is Ownable, IAutoMate {
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
     //////////////////////////////////////////////////////////////*/
+    function hasPendingTask() external view returns (bool) {
+        return _tasks.length > 0;
+    }
+
     function getTask(uint256 taskId) external view override returns (Task memory) {
         return _tasks[taskId];
     }

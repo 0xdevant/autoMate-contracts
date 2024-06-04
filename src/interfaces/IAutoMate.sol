@@ -14,7 +14,7 @@ interface IAutoMate {
         address subscriber;
         TaskType taskType;
         address callingContract;
-        uint40 startTs;
+        uint40 lastRunTs;
         uint16 intervalInHours;
         uint16 lastForInHours;
         uint256 totalAmounts;
@@ -32,6 +32,7 @@ interface IAutoMate {
     function subscribeTask(bytes memory taskInfo) external payable returns (uint256 taskId);
     function executeTask(uint256 taskId) external;
 
+    function hasPendingTask() external view returns (bool);
     function getTask(uint256 taskId) external view returns (Task memory);
     function getProtocolFeeBP() external view returns (uint16);
 }
