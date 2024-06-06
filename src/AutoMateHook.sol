@@ -14,24 +14,48 @@ import {IAutoMate} from "./interfaces/IAutoMate.sol";
 contract AutoMateHook is BaseHook {
     using CurrencySettleTake for Currency;
 
-    uint256 private constant _DUTCH_AUCTION_INTERVAL = 1 hours;
-    uint256 private constant _MAX_PRICE_DROP_BP = 200; // 2%
+    uint256 private constant _MAX_PRICE_DROP_BP = 1000; // 10%
+    // only allow at most monthly(30 days) task to be scheduled
+    uint256 private constant _MAX_DUTCH_AUCTION_INTERVAL_IN_HOUR = 720;
+    uint256 private constant _PRICE_DROP_PRECISION = 1e18;
+    uint256 private constant _DAILY_IN_HOUR = 24;
+    uint256 private constant _WEEKLY_IN_HOUR = 24 * 7;
+    uint256 private constant _MONTHLY_IN_HOUR = 24 * 30;
+
+    /// @dev The interval in hour between each Dutch auction, to be deployed with different intervals for each pool
+    ///      currently only support strict intervals like hourly(1), daily(24), weekly(7*24), monthly(30*24)
+    uint16 public immutable DUTCH_AUCTION_INTERVAL_IN_HOUR;
 
     IAutoMate private _autoMate;
 
     bool private _isDutchAuctionDisabled;
     uint64 private _lastDutchAuctionStartTs;
-    uint8 private _bpDropPerMin = 1; // 0.01% for now, so price drop 0.6% at max
+    /// @dev The max price drop for Dutch auction in Basis Points relative to dutchAuctionIntervalInHour set for each pool
+    ///      for example if dutchAuctionIntervalInHour is 24, _maxBPDropPerDutchAuction is 100:
+    ///      there will be 1% max price drop for each daily Dutch auction i.e. 0.0416666667% drop per hour
+    uint16 private _maxBPDropPerDutchAuction;
 
     error OnlyFromAutoMate();
+    error ExceedsMaxDutchAuctionInterval();
 
     modifier onlyFromAutoMate() {
         if (msg.sender != address(_autoMate)) revert OnlyFromAutoMate();
         _;
     }
 
-    constructor(IPoolManager poolManager, address autoMate) BaseHook(poolManager) {
+    constructor(
+        IPoolManager poolManager,
+        address autoMate,
+        uint16 dutchAuctionIntervalInHour,
+        uint16 maxBPDropPerDutchAuction
+    ) BaseHook(poolManager) {
+        if (dutchAuctionIntervalInHour > _MAX_DUTCH_AUCTION_INTERVAL_IN_HOUR) {
+            revert ExceedsMaxDutchAuctionInterval();
+        }
+
         _autoMate = IAutoMate(autoMate);
+        DUTCH_AUCTION_INTERVAL_IN_HOUR = dutchAuctionIntervalInHour;
+        _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
@@ -105,23 +129,26 @@ contract AutoMateHook is BaseHook {
         //             => y: start a new auction and reset the price curve n: auction on-going, update new calculation on price curve
         // Scenario 2: if no pending task => back to normal curve
 
-        if (_autoMate.hasPendingTask()) {
-            uint256 priceDropBP;
+        uint256 taskCategoryId =
+            _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(DUTCH_AUCTION_INTERVAL_IN_HOUR));
+
+        if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
+            // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
+            uint256 priceDropBPWithPrecision;
 
             // auction on-going
-            if (block.timestamp < _lastDutchAuctionStartTs + _DUTCH_AUCTION_INTERVAL) {
+            if (block.timestamp < _lastDutchAuctionStartTs + DUTCH_AUCTION_INTERVAL_IN_HOUR * 1 hours) {
                 // block.timestamp must be > _lastDutchAuctionStartTs at this point
-                uint256 minsElapsed = block.timestamp - _lastDutchAuctionStartTs / 1 minutes;
-                priceDropBP = _bpDropPerMin * minsElapsed;
+                uint256 hoursElapsed = block.timestamp - _lastDutchAuctionStartTs / 1 hours;
+                priceDropBPWithPrecision =
+                    _maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION / DUTCH_AUCTION_INTERVAL_IN_HOUR;
             } else {
                 // start a new auction & restart the custom price curve Dutch auction
                 _lastDutchAuctionStartTs = uint64(block.timestamp);
-                priceDropBP = _bpDropPerMin;
+                priceDropBPWithPrecision = 0;
             }
 
-            // TODO: call executeTask() with taskId auto assigned since you cannnot pass taskId into beforeSwap()
-
-            // TODO: swap with custom price curve via priceDropBP
+            // TODO: swap with custom price curve via * _maxBPDropPerDutchAuction / _PRICE_DROP_PRECISION
             uint256 amountInOutPositive =
                 params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
 
@@ -141,6 +168,10 @@ contract AutoMateHook is BaseHook {
                 key.currency0.settle(poolManager, address(this), amountInOutPositive, true);
                 key.currency1.take(poolManager, address(this), amountInOutPositive, true);
             }
+            // TODO: end
+
+            // executeTask() will be called with an auto assigned taskId since you cannnot pass taskId into beforeSwap()
+            _autoMate.executeTask(taskCategoryId, _autoMate.getNextTaskIndex(taskCategoryId));
         } else {
             return (this.beforeSwap.selector, beforeSwapDelta);
         }
@@ -149,8 +180,29 @@ contract AutoMateHook is BaseHook {
         return (this.beforeSwap.selector, beforeSwapDelta);
     }
 
-    function setBPDropPerMin(uint8 bpDropPerMin) external onlyFromAutoMate {
-        _bpDropPerMin = bpDropPerMin;
+    /*//////////////////////////////////////////////////////////////
+                               INTERNALS
+    //////////////////////////////////////////////////////////////*/
+    function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour)
+        internal
+        pure
+        returns (IAutoMate.TaskInterval)
+    {
+        if (dutchAuctionIntervalInHour == _DAILY_IN_HOUR) {
+            return IAutoMate.TaskInterval.DAILY;
+        } else if (dutchAuctionIntervalInHour == _WEEKLY_IN_HOUR) {
+            return IAutoMate.TaskInterval.WEEKLY;
+        } else if (dutchAuctionIntervalInHour == _MONTHLY_IN_HOUR) {
+            return IAutoMate.TaskInterval.MONTHLY;
+        }
+        return IAutoMate.TaskInterval.HOURLY;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 ADMIN
+    //////////////////////////////////////////////////////////////*/
+    function setBPDropPerMin(uint8 maxBPDropPerDutchAuction) external onlyFromAutoMate {
+        _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
     }
 
     function disableDutchAuction() external onlyFromAutoMate {
@@ -166,5 +218,9 @@ contract AutoMateHook is BaseHook {
     //////////////////////////////////////////////////////////////*/
     function isDutchAuctionDisabled() public view returns (bool) {
         return _isDutchAuctionDisabled;
+    }
+
+    function getMaxBPDropPerDutchAuction() external view returns (uint16) {
+        return _maxBPDropPerDutchAuction;
     }
 }
