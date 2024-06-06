@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.24;
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
-import {BeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 
 abstract contract BaseHook is IHooks {
     error NotPoolManager();
@@ -113,7 +113,7 @@ abstract contract BaseHook is IHooks {
     function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
         external
         virtual
-        returns (bytes4, BeforeSwapDelta)
+        returns (bytes4, BeforeSwapDelta, uint24)
     {
         revert HookNotImplemented();
     }

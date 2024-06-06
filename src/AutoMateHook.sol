@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency} from "v4-core/types/Currency.sol";
-import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
+import {CurrencySettler} from "v4-core-test/utils/CurrencySettler.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {BaseHook} from "./forks/BaseHook.sol";
@@ -12,7 +12,7 @@ import {BaseHook} from "./forks/BaseHook.sol";
 import {IAutoMate} from "./interfaces/IAutoMate.sol";
 
 contract AutoMateHook is BaseHook {
-    using CurrencySettleTake for Currency;
+    using CurrencySettler for Currency;
 
     uint256 private constant _MAX_PRICE_DROP_BP = 1000; // 10%
     // only allow at most monthly(30 days) task to be scheduled
@@ -81,7 +81,7 @@ contract AutoMateHook is BaseHook {
     function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         external
         override
-        returns (bytes4, BeforeSwapDelta)
+        returns (bytes4, BeforeSwapDelta, uint24)
     {
         /**
          * BalanceDelta is a packed value of (currency0Amount, currency1Amount)
@@ -123,7 +123,7 @@ contract AutoMateHook is BaseHook {
         // use custom price curve with Dutch auction to incentivize keepers to execute the task
         /* AUTOMATE integration STARTS */
         // no change to price curve if Dutch auction is disabled
-        if (_isDutchAuctionDisabled) return (this.beforeSwap.selector, beforeSwapDelta);
+        if (_isDutchAuctionDisabled) return (this.beforeSwap.selector, beforeSwapDelta, 0);
 
         // Scenario 1: if has pending task => check if auction already passed 1 hr
         //             => y: start a new auction and reset the price curve n: auction on-going, update new calculation on price curve
@@ -173,11 +173,11 @@ contract AutoMateHook is BaseHook {
             // executeTask() will be called with an auto assigned taskId since you cannnot pass taskId into beforeSwap()
             _autoMate.executeTask(taskCategoryId, _autoMate.getNextTaskIndex(taskCategoryId));
         } else {
-            return (this.beforeSwap.selector, beforeSwapDelta);
+            return (this.beforeSwap.selector, beforeSwapDelta, 0);
         }
         /* AUTOMATE ENDS */
 
-        return (this.beforeSwap.selector, beforeSwapDelta);
+        return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
 
     /*//////////////////////////////////////////////////////////////
