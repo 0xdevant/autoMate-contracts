@@ -52,7 +52,7 @@ contract AutoMateSetup is Test, Deployers {
 
         // 3) Deploy our AutoMate contract
         // 1% fee
-        autoMate = new AutoMate(address(autoMateHook), 100);
+        autoMate = new AutoMate(100);
 
         // 4) Mine an address that has flags set for the hook functions we want
         uint160 flags = uint160(
@@ -74,7 +74,10 @@ contract AutoMateSetup is Test, Deployers {
             100
         );
 
-        // 6) Initialize a pool with these two tokens
+        // 6) Set the hook address in the AutoMate contract
+        autoMate.setHookAddress(address(autoMateHook));
+
+        // 7) Initialize a pool with these two tokens
         (poolKey, ) = initPool(
             currency0,
             currency1,
@@ -83,5 +86,9 @@ contract AutoMateSetup is Test, Deployers {
             SQRT_PRICE_1_1, // Initial Sqrt(P) value = 1
             ZERO_BYTES // No additional `initData`
         );
+
+        // Approve AutoMate contract to spend tokens
+        token0.approve(address(autoMate), type(uint256).max);
+        token1.approve(address(autoMate), type(uint256).max);
     }
 }
