@@ -2,16 +2,22 @@
 pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {Currency} from "v4-core/types/Currency.sol";
-import {CurrencySettler} from "v4-core-test/utils/CurrencySettler.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
-import {BaseHook} from "./forks/BaseHook.sol";
 
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
+import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
+import {CurrencySettler} from "v4-core-test/utils/CurrencySettler.sol";
+
+import {BaseHook} from "./forks/BaseHook.sol";
 import {IAutoMate} from "./interfaces/IAutoMate.sol";
 
 contract AutoMateHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
     using CurrencySettler for Currency;
 
     uint256 private constant _MAX_PRICE_DROP_BP = 1000; // 10%
@@ -22,9 +28,9 @@ contract AutoMateHook is BaseHook {
     uint256 private constant _WEEKLY_IN_HOUR = 24 * 7;
     uint256 private constant _MONTHLY_IN_HOUR = 24 * 30;
 
-    /// @dev The interval in hour between each Dutch auction, to be deployed with different intervals for each pool
+    /// @dev The interval in hour between each Dutch auction, with different intervals for each pool
     ///      currently only support strict intervals like hourly(1), daily(24), weekly(7*24), monthly(30*24)
-    uint16 public immutable DUTCH_AUCTION_INTERVAL_IN_HOUR;
+    mapping(PoolId poolId => uint16 dutchAuctionIntervalInHour) public poolsDutchAuctionIntervalInHour;
 
     IAutoMate private _autoMate;
 
@@ -45,6 +51,7 @@ contract AutoMateHook is BaseHook {
 
     constructor(
         IPoolManager poolManager,
+        PoolKey memory key,
         address autoMate,
         uint16 dutchAuctionIntervalInHour,
         uint16 maxBPDropPerDutchAuction
@@ -54,7 +61,7 @@ contract AutoMateHook is BaseHook {
         }
 
         _autoMate = IAutoMate(autoMate);
-        DUTCH_AUCTION_INTERVAL_IN_HOUR = dutchAuctionIntervalInHour;
+        poolsDutchAuctionIntervalInHour[key.toId()] = dutchAuctionIntervalInHour;
         _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
     }
 
@@ -129,26 +136,23 @@ contract AutoMateHook is BaseHook {
         //             => y: start a new auction and reset the price curve n: auction on-going, update new calculation on price curve
         // Scenario 2: if no pending task => back to normal curve
 
-        uint256 taskCategoryId =
-            _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(DUTCH_AUCTION_INTERVAL_IN_HOUR));
+        uint256 taskCategoryId;
+        uint256 currBPDropWithPrecision;
+
+        // to avoid stack too deep error
+        {
+            uint16 dutchAuctionIntervalInHour = poolsDutchAuctionIntervalInHour[key.toId()];
+            taskCategoryId =
+                _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
+
+            // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
+            currBPDropWithPrecision = _startNewAuctionOrAdjustPriceFactor(
+                _lastDutchAuctionStartTs, dutchAuctionIntervalInHour, _maxBPDropPerDutchAuction
+            );
+        }
 
         if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
-            // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
-            uint256 priceDropBPWithPrecision;
-
-            // auction on-going
-            if (block.timestamp < _lastDutchAuctionStartTs + DUTCH_AUCTION_INTERVAL_IN_HOUR * 1 hours) {
-                // block.timestamp must be > _lastDutchAuctionStartTs at this point
-                uint256 hoursElapsed = block.timestamp - _lastDutchAuctionStartTs / 1 hours;
-                priceDropBPWithPrecision =
-                    _maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION / DUTCH_AUCTION_INTERVAL_IN_HOUR;
-            } else {
-                // start a new auction & restart the custom price curve Dutch auction
-                _lastDutchAuctionStartTs = uint64(block.timestamp);
-                priceDropBPWithPrecision = 0;
-            }
-
-            // TODO: swap with custom price curve via * _maxBPDropPerDutchAuction / _PRICE_DROP_PRECISION
+            // TODO: swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
             uint256 amountInOutPositive =
                 params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
 
@@ -183,6 +187,24 @@ contract AutoMateHook is BaseHook {
     /*//////////////////////////////////////////////////////////////
                                INTERNALS
     //////////////////////////////////////////////////////////////*/
+    function _startNewAuctionOrAdjustPriceFactor(
+        uint256 lastDutchAuctionStartTs,
+        uint16 dutchAuctionIntervalInHour,
+        uint16 maxBPDropPerDutchAuction
+    ) internal returns (uint256 currBPDropWithPrecision) {
+        // auction on-going
+        if (block.timestamp < lastDutchAuctionStartTs + dutchAuctionIntervalInHour * 1 hours) {
+            // block.timestamp must be > lastDutchAuctionStartTs at this point
+            uint256 hoursElapsed = block.timestamp - lastDutchAuctionStartTs / 1 hours;
+            currBPDropWithPrecision =
+                maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION / dutchAuctionIntervalInHour;
+        } else {
+            // start a new auction & restart the custom price curve Dutch auction
+            _lastDutchAuctionStartTs = uint64(block.timestamp);
+            currBPDropWithPrecision = 0;
+        }
+    }
+
     function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour)
         internal
         pure
