@@ -55,7 +55,9 @@ contract AutoMateSetup is Test, Deployers {
         autoMate = new AutoMate(address(autoMateHook), 100);
 
         // 4) Mine an address that has flags set for the hook functions we want
-        uint160 flags = uint160(Hooks.BEFORE_SWAP_FLAG);
+        uint160 flags = uint160(
+            Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+        );
         (, bytes32 salt) = HookMiner.find(
             address(this),
             flags,
