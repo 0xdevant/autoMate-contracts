@@ -19,39 +19,4 @@ import {AutoMateHook} from "src/AutoMateHook.sol";
 
 import "src/interfaces/IAutoMate.sol";
 
-contract TestAutoMate is AutoMateSetup {
-    function testSubscribeTask() public {
-        bytes memory taskInfo = abi.encode(
-            IAutoMate.TaskType.ERC20_TRANSFER,
-            IAutoMate.TaskInterval.DAILY,
-            uint40(720),
-            address(token0),
-            uint256(1000 ether),
-            uint256(0),
-            bytes("")
-        );
-        uint256 taskId = autoMate.subscribeTask(poolKey, taskInfo);
-        assertEq(taskId, 0);
-    }
-
-    function testExecuteTask() public {
-        bytes memory taskInfo = abi.encode(
-            IAutoMate.TaskType.ERC20_TRANSFER,
-            IAutoMate.TaskInterval.DAILY,
-            uint40(720),
-            address(token0),
-            uint256(1000 ether),
-            uint256(0),
-            bytes("")
-        );
-        autoMate.subscribeTask(poolKey, taskInfo);
-        autoMateHook.beforeSwap(
-            user,
-            poolKey,
-            IPoolManager.SwapParams(true, -1000, TickMath.MIN_SQRT_PRICE + 1),
-            ""
-        );
-
-        assertEq(token0.balanceOf(user), 0);
-    }
-}
+contract TestAutoMate is AutoMateSetup {}

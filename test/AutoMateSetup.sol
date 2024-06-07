@@ -61,7 +61,6 @@ contract AutoMateSetup is Test, Deployers {
         (, bytes32 salt) = HookMiner.find(
             address(this),
             flags,
-            0,
             type(AutoMateHook).creationCode,
             abi.encode(poolManager, address(autoMate), 24, 100)
         );
