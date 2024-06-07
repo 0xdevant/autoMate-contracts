@@ -1,6 +1,6 @@
-name: test
+name: Contract Tests
 
-on: workflow_dispatch
+on: [push, workflow_dispatch]
 
 env:
   FOUNDRY_PROFILE: ci
@@ -32,3 +32,8 @@ jobs:
         run: |
           forge test -vvv
         id: test
+
+      - name: 'Add test summary'
+        run: |
+          echo "## Tests result" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
