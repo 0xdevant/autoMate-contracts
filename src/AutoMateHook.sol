@@ -41,6 +41,7 @@ contract AutoMateHook is BaseHook {
     /// @dev The max price drop for Dutch auction in Basis Points relative to dutchAuctionIntervalInHour set for each pool
     ///      for example if dutchAuctionIntervalInHour is 24, _maxBPDropPerDutchAuction is 100:
     ///      there will be 1% max price drop for each daily Dutch auction i.e. 0.0416666667% drop per hour
+
     uint16 private _maxBPDropPerDutchAuction;
 
     error OnlyFromAutoMate();
@@ -66,20 +67,10 @@ contract AutoMateHook is BaseHook {
         _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
     }
 
-    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
-        external
-        override
-        poolManagerOnly
-        returns (bytes4)
-    {
-        poolsDutchAuctionIntervalInHour[key.toId()] = DUTCH_AUCTION_INTERVAL_IN_HOUR;
-        return this.afterInitialize.selector;
-    }
-
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
-            afterInitialize: false,
+            afterInitialize: true,
             beforeAddLiquidity: false,
             afterAddLiquidity: false,
             beforeRemoveLiquidity: false,
@@ -93,6 +84,16 @@ contract AutoMateHook is BaseHook {
             afterAddLiquidityReturnDelta: false,
             afterRemoveLiquidityReturnDelta: false
         });
+    }
+
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
+        external
+        override
+        poolManagerOnly
+        returns (bytes4)
+    {
+        poolsDutchAuctionIntervalInHour[key.toId()] = DUTCH_AUCTION_INTERVAL_IN_HOUR;
+        return this.afterInitialize.selector;
     }
 
     // Swapping
