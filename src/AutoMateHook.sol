@@ -28,6 +28,8 @@ contract AutoMateHook is BaseHook {
     uint256 private constant _WEEKLY_IN_HOUR = 24 * 7;
     uint256 private constant _MONTHLY_IN_HOUR = 24 * 30;
 
+    uint16 public immutable DUTCH_AUCTION_INTERVAL_IN_HOUR;
+
     /// @dev The interval in hour between each Dutch auction, with different intervals for each pool
     ///      currently only support strict intervals like hourly(1), daily(24), weekly(7*24), monthly(30*24)
     mapping(PoolId poolId => uint16 dutchAuctionIntervalInHour) public poolsDutchAuctionIntervalInHour;
@@ -51,7 +53,6 @@ contract AutoMateHook is BaseHook {
 
     constructor(
         IPoolManager poolManager,
-        PoolKey memory key,
         address autoMate,
         uint16 dutchAuctionIntervalInHour,
         uint16 maxBPDropPerDutchAuction
@@ -61,8 +62,18 @@ contract AutoMateHook is BaseHook {
         }
 
         _autoMate = IAutoMate(autoMate);
-        poolsDutchAuctionIntervalInHour[key.toId()] = dutchAuctionIntervalInHour;
+        DUTCH_AUCTION_INTERVAL_IN_HOUR = dutchAuctionIntervalInHour;
         _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
+    }
+
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
+        external
+        override
+        poolManagerOnly
+        returns (bytes4)
+    {
+        poolsDutchAuctionIntervalInHour[key.toId()] = DUTCH_AUCTION_INTERVAL_IN_HOUR;
+        return this.afterInitialize.selector;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
