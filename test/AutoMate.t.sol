@@ -8,6 +8,8 @@ import {PoolManager} from "v4-core/PoolManager.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
@@ -20,20 +22,13 @@ import {AutoMateHook} from "src/AutoMateHook.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import "src/interfaces/IAutoMate.sol";
+import {IAutoMate} from "src/interfaces/IAutoMate.sol";
 
 contract TestAutoMate is AutoMateSetup {
+    using PoolIdLibrary for PoolKey;
+
     function test_subscribeTask_CanSubscribeTask() public {
-        bytes memory taskInfo = abi.encode(
-            IAutoMate.TaskType.ERC20_TRANSFER,
-            IAutoMate.TaskInterval.DAILY,
-            uint40(720),
-            address(token0),
-            1000 ether,
-            0,
-            abi.encodeCall(IERC20.transfer, (user, 1 ether))
-        );
-        uint256 taskId = autoMate.subscribeTask(key, taskInfo);
+        taskId = subscribeTask();
         assertEq(taskId, 0);
     }
 
@@ -87,17 +82,85 @@ contract TestAutoMate is AutoMateSetup {
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
     //////////////////////////////////////////////////////////////*/
-    function test_getTaskCategoryId_CanGetTaskCategroyId() public {}
+    function test_getTaskCategoryId_CanReturnTaskCategroyId() public {
+        subscribeTask();
+        uint256 taskCategoryId = uint256(keccak256(abi.encode(key.toId(), taskIntervalDaily)));
+        assertEq(autoMate.getTaskCategoryId(key, taskIntervalDaily), taskCategoryId);
+    }
 
-    function test_hasPendingTaskInCategory_CanGetGetTaskInCategoryLength() public {}
+    function test_hasPendingTaskInCategory_ReturnTrueIfThereIsPendingTask() public {
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+        assertFalse(autoMate.hasPendingTaskInCategory(taskCategoryId));
+        subscribeTask();
+        assertTrue(autoMate.hasPendingTaskInCategory(taskCategoryId));
+    }
 
-    function test_getNumOfTasksInCategory_CanGetNumOfTasks() public {}
+    function test_getNumOfTasksInCategory_CanGetNumOfTasks() public {
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+        assertEq(autoMate.getNumOfTasksInCategory(taskCategoryId), 0);
+        subscribeTask();
+        assertEq(autoMate.getNumOfTasksInCategory(taskCategoryId), 1);
+    }
 
-    function test_getTaskInCategory_CanGetTaskInCategory() public {}
+    function test_getTaskInCategory_CanGetTaskArrayOfSpecifiedIdAndInterval() public {
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+        IAutoMate.Task[] memory tasks = autoMate.getTasksInCategory(taskCategoryId);
 
-    function test_getTask_CanGetTask() public {}
+        // No tasks before subscribing
+        assertEq(tasks.length, 0);
+        subscribeTask();
 
-    function test_getNextTaskIndex_CanGetNextTaskIndex() public {}
+        uint256 lastForInHours = 720;
+        uint256 totalAmounts = 1000 ether;
+        uint256 amountForEachRun = totalAmounts / lastForInHours;
+
+        tasks = autoMate.getTasksInCategory(taskCategoryId);
+
+        // Should have 1 task after subscribing
+        assertEq(tasks.length, 1);
+        IAutoMate.Task memory task = tasks[0];
+        assertEq(task.id, taskId);
+        assertEq(task.subscriber, address(this));
+        assertEq(uint256(task.taskType), uint256(IAutoMate.TaskType.ERC20_TRANSFER));
+        assertEq(uint256(task.taskInterval), uint256(taskIntervalDaily));
+        assertEq(task.lastRunTs, 0);
+        assertEq(task.lastForInHours, lastForInHours);
+        assertEq(task.callingAddress, address(token0));
+        assertEq(task.totalAmounts, totalAmounts);
+        assertEq(task.totalValues, 0);
+        assertEq(task.amountForEachRun, amountForEachRun);
+        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (user, 1 ether)));
+    }
+
+    function test_getTask_CanGetTaskDetails() public {
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+
+        subscribeTask();
+        IAutoMate.Task memory task = autoMate.getTask(taskCategoryId, taskId);
+        uint256 lastForInHours = 720;
+        uint256 totalAmounts = 1000 ether;
+        uint256 amountForEachRun = totalAmounts / lastForInHours;
+
+        assertEq(task.id, taskId);
+        assertEq(task.subscriber, address(this));
+        assertEq(uint256(task.taskType), uint256(IAutoMate.TaskType.ERC20_TRANSFER));
+        assertEq(uint256(task.taskInterval), uint256(taskIntervalDaily));
+        assertEq(task.lastRunTs, 0);
+        assertEq(task.lastForInHours, lastForInHours);
+        assertEq(task.callingAddress, address(token0));
+        assertEq(task.totalAmounts, totalAmounts);
+        assertEq(task.totalValues, 0);
+        assertEq(task.amountForEachRun, amountForEachRun);
+        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (user, 1 ether)));
+    }
+
+    function test_getNextTaskIndex_CanGetNextTaskIndex() public {
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+        assertEq(autoMate.getNextTaskIndex(taskCategoryId), 0);
+        subscribeTask();
+        assertEq(autoMate.getNextTaskIndex(taskCategoryId), 0);
+        // execute task logic for next task index
+    }
 
     function test_getHookAddress_CanGetHookAddress() public view {
         assertEq(autoMate.getHookAddress(), address(autoMateHook));

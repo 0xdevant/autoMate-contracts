@@ -17,6 +17,8 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+
 import {AutoMateHook} from "src/AutoMateHook.sol";
 import {AutoMate} from "src/AutoMate.sol";
 
@@ -37,6 +39,12 @@ contract AutoMateSetup is Test, Deployers {
 
     IPoolManager public poolManager;
     address public user = address(1);
+
+    // Variables for AutoMate test cases
+    IAutoMate.TaskInterval taskIntervalDaily = IAutoMate.TaskInterval.DAILY;
+    uint256 taskId;
+
+    // Variables for AutoMateHook test cases
 
     function setUp() public {
         // 1) Deploy v4 core contracts (PoolManager, periphery Router contracts for swapping, modifying liquidity etc)
@@ -99,5 +107,21 @@ contract AutoMateSetup is Test, Deployers {
             }),
             ZERO_BYTES
         );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        TEST UTILS
+    //////////////////////////////////////////////////////////////*/
+    function subscribeTask() public returns (uint256 id) {
+        bytes memory taskInfo = abi.encode(
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            IAutoMate.TaskInterval.DAILY,
+            uint40(720),
+            address(token0),
+            1000 ether,
+            0,
+            abi.encodeCall(IERC20.transfer, (user, 1 ether))
+        );
+        id = autoMate.subscribeTask(key, taskInfo);
     }
 }
