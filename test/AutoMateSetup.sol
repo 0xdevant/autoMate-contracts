@@ -17,8 +17,6 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 
-// Our contracts
-import {HookMiner} from "test/utils/HookMiner.sol";
 import {AutoMateHook} from "src/AutoMateHook.sol";
 import {AutoMate} from "src/AutoMate.sol";
 
@@ -38,7 +36,6 @@ contract AutoMateSetup is Test, Deployers {
     MockERC20 token1;
 
     IPoolManager public poolManager;
-    PoolKey public poolKey;
     address public user = address(1);
 
     function setUp() public {
@@ -54,31 +51,19 @@ contract AutoMateSetup is Test, Deployers {
         // 1% fee
         autoMate = new AutoMate(100);
 
-        // 4) Mine an address that has flags set for the hook functions we want
-        uint160 flags = uint160(
-            Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+        // 4) Deploy Hook contract to specified address
+        address hookAddress = address(
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
         );
-        (, bytes32 salt) = HookMiner.find(
-            address(this),
-            flags,
-            type(AutoMateHook).creationCode,
-            abi.encode(poolManager, address(autoMate), 24, 100)
-        );
-
-        // 5) Deploy our hook
         // Daily auction, 1% drop
-        autoMateHook = new AutoMateHook{salt: salt}(
-            poolManager,
-            address(autoMate),
-            24,
-            100
-        );
+        deployCodeTo("AutoMateHook.sol", abi.encode(manager, address(autoMate), 24, 100), hookAddress);
+        autoMateHook = AutoMateHook(hookAddress);
 
-        // 6) Set the hook address in the AutoMate contract
+        // 5) Set the hook address in the AutoMate contract
         autoMate.setHookAddress(address(autoMateHook));
 
-        // 7) Initialize a pool with these two tokens
-        (poolKey, ) = initPool(
+        // 6) Initialize a pool with these two tokens
+        (key,) = initPool(
             currency0,
             currency1,
             autoMateHook, // Hook Contract
@@ -87,8 +72,34 @@ contract AutoMateSetup is Test, Deployers {
             ZERO_BYTES // No additional `initData`
         );
 
-        // Approve AutoMate contract to spend tokens
+        // 7) Add initial liquidity to the pool
+        token0.approve(hookAddress, type(uint256).max);
+        token1.approve(hookAddress, type(uint256).max);
         token0.approve(address(autoMate), type(uint256).max);
         token1.approve(address(autoMate), type(uint256).max);
+
+        // Some liquidity from -60 to +60 tick range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 10 ether, salt: ""}),
+            ZERO_BYTES
+        );
+        // Some liquidity from -120 to +120 tick range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 10 ether, salt: ""}),
+            ZERO_BYTES
+        );
+        // some liquidity for full range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: TickMath.minUsableTick(60),
+                tickUpper: TickMath.maxUsableTick(60),
+                liquidityDelta: 10 ether,
+                salt: ""
+            }),
+            ZERO_BYTES
+        );
     }
 }

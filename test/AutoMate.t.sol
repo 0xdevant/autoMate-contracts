@@ -17,6 +17,8 @@ import {AutoMateSetup} from "test/AutoMateSetup.sol";
 import {AutoMate} from "src/AutoMate.sol";
 import {AutoMateHook} from "src/AutoMateHook.sol";
 
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+
 import "src/interfaces/IAutoMate.sol";
 
 contract TestAutoMate is AutoMateSetup {
@@ -26,11 +28,11 @@ contract TestAutoMate is AutoMateSetup {
             IAutoMate.TaskInterval.DAILY,
             uint40(720),
             address(token0),
-            uint256(1000 ether),
-            uint256(1000 ether),
-            bytes("")
+            1000 ether,
+            0,
+            abi.encodeCall(IERC20.transfer, (user, 1 ether))
         );
-        uint256 taskId = autoMate.subscribeTask(poolKey, taskInfo);
+        uint256 taskId = autoMate.subscribeTask(key, taskInfo);
         assertEq(taskId, 0);
     }
 
@@ -44,10 +46,10 @@ contract TestAutoMate is AutoMateSetup {
     //         uint256(0),
     //         bytes("")
     //     );
-    //     autoMate.subscribeTask(poolKey, taskInfo);
+    //     autoMate.subscribeTask(key, taskInfo);
     //     autoMateHook.beforeSwap(
     //         user,
-    //         poolKey,
+    //         key,
     //         IPoolManager.SwapParams(true, -1000, TickMath.MIN_SQRT_PRICE + 1),
     //         ""
     //     );
