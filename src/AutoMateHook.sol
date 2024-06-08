@@ -35,20 +35,27 @@ contract AutoMateHook is BaseHook {
     ///      currently only support strict intervals like hourly(1), daily(24), weekly(7*24), monthly(30*24)
     mapping(PoolId poolId => uint16 dutchAuctionIntervalInHour) public poolsDutchAuctionIntervalInHour;
 
+    mapping(PoolId poolId => uint256 lastDutchAuctionStartTs) public poolsLastDutchAuctionStartTs;
+
     IAutoMate private _autoMate;
 
     bool private _isDutchAuctionDisabled;
-    uint64 private _lastDutchAuctionStartTs;
     /// @dev The max price drop for Dutch auction in Basis Points relative to dutchAuctionIntervalInHour set for each pool
     ///      for example if dutchAuctionIntervalInHour is 24, _maxBPDropPerDutchAuction is 100:
     ///      there will be 1% max price drop for each daily Dutch auction i.e. 0.0416666667% drop per hour
     uint16 private _maxBPDropPerDutchAuction;
 
     error OnlyFromAutoMate();
+    error OnlyFromAutoMateOrSelf();
     error ExceedsMaxDutchAuctionInterval();
 
     modifier onlyFromAutoMate() {
         if (msg.sender != address(_autoMate)) revert OnlyFromAutoMate();
+        _;
+    }
+
+    modifier onlyFromAutoMateOrSelf() {
+        if (msg.sender != address(_autoMate) || msg.sender != address(this)) revert OnlyFromAutoMateOrSelf();
         _;
     }
 
@@ -68,38 +75,42 @@ contract AutoMateHook is BaseHook {
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return
-            Hooks.Permissions({
-                beforeInitialize: false,
-                afterInitialize: true,
-                beforeAddLiquidity: false,
-                afterAddLiquidity: false,
-                beforeRemoveLiquidity: false,
-                afterRemoveLiquidity: false,
-                beforeSwap: true, // Override how swaps are done
-                afterSwap: false,
-                beforeDonate: false,
-                afterDonate: false,
-                beforeSwapReturnDelta: true, // Allow beforeSwap to return a custom delta
-                afterSwapReturnDelta: false,
-                afterAddLiquidityReturnDelta: false,
-                afterRemoveLiquidityReturnDelta: false
-            });
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: true,
+            beforeAddLiquidity: false,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: true, // Override how swaps are done
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: true, // Allow beforeSwap to return a custom delta
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
     }
 
-    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata) external override poolManagerOnly returns (bytes4) {
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
+        external
+        override
+        poolManagerOnly
+        returns (bytes4)
+    {
         poolsDutchAuctionIntervalInHour[key.toId()] = DUTCH_AUCTION_INTERVAL_IN_HOUR;
         return this.afterInitialize.selector;
     }
 
     // Swapping
-    function beforeSwap(
-        address,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
-        uint256 amountInOutPositive = params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
+    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
+        external
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        uint256 amountInOutPositive =
+            params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
 
         /**
          * BalanceDelta is a packed value of (currency0Amount, currency1Amount)
@@ -142,30 +153,26 @@ contract AutoMateHook is BaseHook {
         if (_isDutchAuctionDisabled) return (this.beforeSwap.selector, beforeSwapDelta, 0);
 
         uint16 dutchAuctionIntervalInHour = poolsDutchAuctionIntervalInHour[key.toId()];
-        uint256 taskCategoryId = _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
+        uint256 taskCategoryId =
+            _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
 
-        // Scenario 1: if has pending task => check if auction already passed 1 hr
-        //             => y: start a new auction and reset the price curve / n: auction on-going, update new calculation on price curve
-        // Scenario 2: if no pending task => back to normal curve
-        if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
-            // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
-            uint256 currBPDropWithPrecision = _startNewAuctionOrAdjustPriceFactor(
-                _lastDutchAuctionStartTs,
-                dutchAuctionIntervalInHour,
-                _maxBPDropPerDutchAuction
-            );
+        // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
+        uint256 currBPDropWithPrecision = _calculatePriceFactor(
+            taskCategoryId,
+            poolsLastDutchAuctionStartTs[key.toId()],
+            dutchAuctionIntervalInHour,
+            _maxBPDropPerDutchAuction
+        );
+        if (currBPDropWithPrecision == 0) return (this.beforeSwap.selector, beforeSwapDelta, 0);
 
-            // swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
-            beforeSwapDelta = toBeforeSwapDelta(
-                _getDiscountedInputAmount(params.amountSpecified, currBPDropWithPrecision),
-                int128(params.amountSpecified)
-            );
+        // swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
+        beforeSwapDelta = toBeforeSwapDelta(
+            _getDiscountedInputAmount(params.amountSpecified, currBPDropWithPrecision), int128(params.amountSpecified)
+        );
 
-            // executeTask() will be called with an auto assigned taskId since you cannnot pass taskId into beforeSwap()
-            _autoMate.executeTask(taskCategoryId, _autoMate.getNextTaskIndex(taskCategoryId));
-        } else {
-            return (this.beforeSwap.selector, beforeSwapDelta, 0);
-        }
+        // executeTask() will be called with an auto assigned taskId since you cannnot pass taskId into beforeSwap()
+        _autoMate.executeTask(taskCategoryId, _autoMate.getNextTaskIndex(taskCategoryId));
+        _setUpAuctionAfterExecution(key, taskCategoryId, dutchAuctionIntervalInHour);
 
         if (params.zeroForOne) {
             // If user is selling Token 0 and buying Token 1
@@ -190,24 +197,34 @@ contract AutoMateHook is BaseHook {
     /*//////////////////////////////////////////////////////////////
                                INTERNALS
     //////////////////////////////////////////////////////////////*/
-    function _startNewAuctionOrAdjustPriceFactor(
+    function _calculatePriceFactor(
+        uint256 taskCategoryId,
         uint256 lastDutchAuctionStartTs,
         uint16 dutchAuctionIntervalInHour,
         uint16 maxBPDropPerDutchAuction
-    ) internal returns (uint256 currBPDropWithPrecision) {
+    ) internal view returns (uint256 currBPDropWithPrecision) {
         // auction on-going
         if (block.timestamp < lastDutchAuctionStartTs + dutchAuctionIntervalInHour * 1 hours) {
             // block.timestamp must be > lastDutchAuctionStartTs at this point
             uint256 hoursElapsed = block.timestamp - lastDutchAuctionStartTs / 1 hours;
-            currBPDropWithPrecision = (maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION) / dutchAuctionIntervalInHour;
+            currBPDropWithPrecision =
+                (maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION) / dutchAuctionIntervalInHour;
         } else {
-            // start a new auction & restart the custom price curve Dutch auction
-            _lastDutchAuctionStartTs = uint64(block.timestamp);
-            currBPDropWithPrecision = 0;
+            // if there is situation when auction is expired but still has remaining tasks that no one execute, then just apply the maxBPDropPerDutchAuction
+            if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
+                currBPDropWithPrecision = maxBPDropPerDutchAuction;
+            } else {
+                // no pending task then no custom curve needed
+                currBPDropWithPrecision = 0;
+            }
         }
     }
 
-    function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour) internal pure returns (IAutoMate.TaskInterval) {
+    function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour)
+        internal
+        pure
+        returns (IAutoMate.TaskInterval)
+    {
         if (dutchAuctionIntervalInHour == _DAILY_IN_HOUR) {
             return IAutoMate.TaskInterval.DAILY;
         } else if (dutchAuctionIntervalInHour == _WEEKLY_IN_HOUR) {
@@ -218,20 +235,41 @@ contract AutoMateHook is BaseHook {
         return IAutoMate.TaskInterval.HOURLY;
     }
 
-    function _getDiscountedInputAmount(
-        int256 amountSpecified,
-        uint256 currBPDropWithPrecision
-    ) internal pure returns (int128 specifiedDiscountedInputAmount) {
+    function _getDiscountedInputAmount(int256 amountSpecified, uint256 currBPDropWithPrecision)
+        internal
+        pure
+        returns (int128 specifiedDiscountedInputAmount)
+    {
         specifiedDiscountedInputAmount = currBPDropWithPrecision != 0
-            ? (int128(-amountSpecified) * (int128(uint128(_BASIS_POINTS)) - int128(uint128(currBPDropWithPrecision)))) /
-                int128(uint128(_BASIS_POINTS)) /
-                int128(uint128(_PRICE_DROP_PRECISION))
+            ? (int128(-amountSpecified) * (int128(uint128(_BASIS_POINTS)) - int128(uint128(currBPDropWithPrecision))))
+                / int128(uint128(_BASIS_POINTS)) / int128(uint128(_PRICE_DROP_PRECISION))
             : int128(-amountSpecified);
+    }
+
+    function _setUpAuctionAfterExecution(
+        PoolKey calldata key,
+        uint256 taskCategoryId,
+        uint16 dutchAuctionIntervalInHour
+    ) internal {
+        // if has pending => start new auction
+        if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
+            poolsLastDutchAuctionStartTs[key.toId()] = block.timestamp;
+        } else {
+            // expire the auction, not resetting to zero due to gas saving
+            poolsLastDutchAuctionStartTs[key.toId()] -= dutchAuctionIntervalInHour * 1 hours;
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
                                  ADMIN
     //////////////////////////////////////////////////////////////*/
+    function setUpAuctionBeforeSubscription(PoolKey calldata key, uint256 taskCategoryId) external onlyFromAutoMate {
+        // if no pending task => start new auction, else stay the same
+        if (!_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
+            poolsLastDutchAuctionStartTs[key.toId()] = block.timestamp;
+        }
+    }
+
     function setBPDropPerMin(uint8 maxBPDropPerDutchAuction) external onlyFromAutoMate {
         _maxBPDropPerDutchAuction = maxBPDropPerDutchAuction;
     }

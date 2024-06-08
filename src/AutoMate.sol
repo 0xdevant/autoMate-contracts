@@ -7,6 +7,7 @@ import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {IAutoMate} from "./interfaces/IAutoMate.sol";
+import {IAutoMateHook} from "./interfaces/IAutoMateHook.sol";
 
 contract AutoMate is Ownable, IAutoMate {
     using PoolIdLibrary for PoolKey;
@@ -52,6 +53,8 @@ contract AutoMate is Ownable, IAutoMate {
         uint256 amountForEachRun = _setupForTask(taskType, lastForInHours, callingAddress, totalAmounts, totalValues);
 
         uint256 taskCategoryId = getTaskCategoryId(key, taskInterval);
+        IAutoMateHook(_hookAddress).setUpAuctionBeforeSubscription(key, taskCategoryId);
+
         taskId = _taskIdCounter++; // starts at 0
         Task memory task = Task(
             taskId,
@@ -174,7 +177,7 @@ contract AutoMate is Ownable, IAutoMate {
         return uint256(keccak256(abi.encode(key.toId(), taskInterval)));
     }
 
-    function hasPendingTaskInCategory(uint256 taskCategoryId) external view returns (bool) {
+    function hasPendingTaskInCategory(uint256 taskCategoryId) public view returns (bool) {
         return _tasks[taskCategoryId].length > 0;
     }
 
