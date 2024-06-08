@@ -27,6 +27,7 @@ contract AutoMateHook is BaseHook {
     uint256 private constant _DAILY_IN_HOUR = 24;
     uint256 private constant _WEEKLY_IN_HOUR = 24 * 7;
     uint256 private constant _MONTHLY_IN_HOUR = 24 * 30;
+    uint256 private constant _BASIS_POINTS = 10000;
 
     uint16 public immutable DUTCH_AUCTION_INTERVAL_IN_HOUR;
 
@@ -41,7 +42,6 @@ contract AutoMateHook is BaseHook {
     /// @dev The max price drop for Dutch auction in Basis Points relative to dutchAuctionIntervalInHour set for each pool
     ///      for example if dutchAuctionIntervalInHour is 24, _maxBPDropPerDutchAuction is 100:
     ///      there will be 1% max price drop for each daily Dutch auction i.e. 0.0416666667% drop per hour
-
     uint16 private _maxBPDropPerDutchAuction;
 
     error OnlyFromAutoMate();
@@ -102,6 +102,9 @@ contract AutoMateHook is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        uint256 amountInOutPositive =
+            params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
+
         /**
          * BalanceDelta is a packed value of (currency0Amount, currency1Amount)
          *
@@ -139,59 +142,50 @@ contract AutoMateHook is BaseHook {
             int128(params.amountSpecified) // Unspecified amount (output delta) = -100
         );
 
-        // use custom price curve with Dutch auction to incentivize keepers to execute the task
-        /* AUTOMATE integration STARTS */
         // no change to price curve if Dutch auction is disabled
         if (_isDutchAuctionDisabled) return (this.beforeSwap.selector, beforeSwapDelta, 0);
 
+        uint16 dutchAuctionIntervalInHour = poolsDutchAuctionIntervalInHour[key.toId()];
+        uint256 taskCategoryId =
+            _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
+
         // Scenario 1: if has pending task => check if auction already passed 1 hr
-        //             => y: start a new auction and reset the price curve n: auction on-going, update new calculation on price curve
+        //             => y: start a new auction and reset the price curve / n: auction on-going, update new calculation on price curve
         // Scenario 2: if no pending task => back to normal curve
-
-        uint256 taskCategoryId;
-        uint256 currBPDropWithPrecision;
-
-        // to avoid stack too deep error
-        {
-            uint16 dutchAuctionIntervalInHour = poolsDutchAuctionIntervalInHour[key.toId()];
-            taskCategoryId =
-                _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
-
+        if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
             // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
-            currBPDropWithPrecision = _startNewAuctionOrAdjustPriceFactor(
+            uint256 currBPDropWithPrecision = _startNewAuctionOrAdjustPriceFactor(
                 _lastDutchAuctionStartTs, dutchAuctionIntervalInHour, _maxBPDropPerDutchAuction
             );
-        }
 
-        if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
-            // TODO: swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
-            uint256 amountInOutPositive =
-                params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
-
-            if (params.zeroForOne) {
-                // If user is selling Token 0 and buying Token 1
-
-                // They will be sending Token 0 to the PM, creating a debit of Token 0 in the PM
-                // We will take claim tokens for that Token 0 from the PM and keep it in the hook
-                // and create an equivalent credit for that Token 0 since it is ours!
-                key.currency0.take(poolManager, address(this), amountInOutPositive, true);
-
-                // They will be receiving Token 1 from the PM, creating a credit of Token 1 in the PM
-                // We will burn claim tokens for Token 1 from the hook so PM can pay the user
-                // and create an equivalent debit for Token 1 since it is ours!
-                key.currency1.settle(poolManager, address(this), amountInOutPositive, true);
-            } else {
-                key.currency0.settle(poolManager, address(this), amountInOutPositive, true);
-                key.currency1.take(poolManager, address(this), amountInOutPositive, true);
-            }
-            // TODO: end
+            // swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
+            beforeSwapDelta = toBeforeSwapDelta(
+                _getDiscountedInputAmount(params.amountSpecified, currBPDropWithPrecision),
+                int128(params.amountSpecified)
+            );
 
             // executeTask() will be called with an auto assigned taskId since you cannnot pass taskId into beforeSwap()
             _autoMate.executeTask(taskCategoryId, _autoMate.getNextTaskIndex(taskCategoryId));
         } else {
             return (this.beforeSwap.selector, beforeSwapDelta, 0);
         }
-        /* AUTOMATE ENDS */
+
+        if (params.zeroForOne) {
+            // If user is selling Token 0 and buying Token 1
+
+            // They will be sending Token 0 to the PM, creating a debit of Token 0 in the PM
+            // We will take claim tokens for that Token 0 from the PM and keep it in the hook
+            // and create an equivalent credit for that Token 0 since it is ours!
+            key.currency0.take(poolManager, address(this), amountInOutPositive, true);
+
+            // They will be receiving Token 1 from the PM, creating a credit of Token 1 in the PM
+            // We will burn claim tokens for Token 1 from the hook so PM can pay the user
+            // and create an equivalent debit for Token 1 since it is ours!
+            key.currency1.settle(poolManager, address(this), amountInOutPositive, true);
+        } else {
+            key.currency0.settle(poolManager, address(this), amountInOutPositive, true);
+            key.currency1.take(poolManager, address(this), amountInOutPositive, true);
+        }
 
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
@@ -230,6 +224,17 @@ contract AutoMateHook is BaseHook {
             return IAutoMate.TaskInterval.MONTHLY;
         }
         return IAutoMate.TaskInterval.HOURLY;
+    }
+
+    function _getDiscountedInputAmount(int256 amountSpecified, uint256 currBPDropWithPrecision)
+        internal
+        pure
+        returns (int128 specifiedDiscountedInputAmount)
+    {
+        specifiedDiscountedInputAmount = currBPDropWithPrecision != 0
+            ? int128(-amountSpecified) * (int128(uint128(_BASIS_POINTS)) - int128(uint128(currBPDropWithPrecision)))
+                / int128(uint128(_BASIS_POINTS)) / int128(uint128(_PRICE_DROP_PRECISION))
+            : int128(-amountSpecified);
     }
 
     /*//////////////////////////////////////////////////////////////
