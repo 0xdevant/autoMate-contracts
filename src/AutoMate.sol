@@ -96,13 +96,12 @@ contract AutoMate is Ownable, IAutoMate {
     /*//////////////////////////////////////////////////////////////
                                INTERNALS
     //////////////////////////////////////////////////////////////*/
-    function _sanityCheck(uint40 lastForInHours, address callingAddress, uint256 totalAmounts, uint256 totalValues)
-        internal
-        pure
-    {
+    function _sanityCheck(uint40 lastForInHours, address callingAddress, uint256 totalAmounts, uint256 totalValues) internal pure {
         if (
-            lastForInHours == 0 || callingAddress == address(0) || (totalAmounts == 0 && totalValues == 0)
-                || (totalAmounts != 0 && totalValues != 0)
+            lastForInHours == 0 ||
+            callingAddress == address(0) ||
+            (totalAmounts == 0 && totalValues == 0) ||
+            (totalAmounts != 0 && totalValues != 0)
         ) {
             revert InvalidTaskInput();
         }
@@ -148,8 +147,7 @@ contract AutoMate is Ownable, IAutoMate {
             IERC20(task.callingAddress).safeTransfer(task.callingAddress, task.amountForEachRun);
         }
         if (task.taskType == TaskType.CONTRACT_CALL_WITH_NATIVE) {
-            (bool success, bytes memory data) =
-                payable(task.callingAddress).call{value: task.amountForEachRun}(task.callData);
+            (bool success, bytes memory data) = payable(task.callingAddress).call{value: task.amountForEachRun}(task.callData);
             if (!success) revert TaskFailed(data);
         }
         if (task.taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {

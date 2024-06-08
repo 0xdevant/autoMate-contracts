@@ -52,9 +52,7 @@ contract AutoMateSetup is Test, Deployers {
         autoMate = new AutoMate(100);
 
         // 4) Deploy Hook contract to specified address
-        address hookAddress = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
-        );
+        address hookAddress = address(uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG));
         // Daily auction, 1% drop
         deployCodeTo("AutoMateHook.sol", abi.encode(manager, address(autoMate), 24, 100), hookAddress);
         autoMateHook = AutoMateHook(hookAddress);
@@ -63,7 +61,7 @@ contract AutoMateSetup is Test, Deployers {
         autoMate.setHookAddress(address(autoMateHook));
 
         // 6) Initialize a pool with these two tokens
-        (key,) = initPool(
+        (key, ) = initPool(
             currency0,
             currency1,
             autoMateHook, // Hook Contract

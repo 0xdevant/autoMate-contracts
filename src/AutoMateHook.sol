@@ -68,42 +68,38 @@ contract AutoMateHook is BaseHook {
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: false,
-            afterInitialize: true,
-            beforeAddLiquidity: false,
-            afterAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: true, // Override how swaps are done
-            afterSwap: false,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: true, // Allow beforeSwap to return a custom delta
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
+        return
+            Hooks.Permissions({
+                beforeInitialize: false,
+                afterInitialize: true,
+                beforeAddLiquidity: false,
+                afterAddLiquidity: false,
+                beforeRemoveLiquidity: false,
+                afterRemoveLiquidity: false,
+                beforeSwap: true, // Override how swaps are done
+                afterSwap: false,
+                beforeDonate: false,
+                afterDonate: false,
+                beforeSwapReturnDelta: true, // Allow beforeSwap to return a custom delta
+                afterSwapReturnDelta: false,
+                afterAddLiquidityReturnDelta: false,
+                afterRemoveLiquidityReturnDelta: false
+            });
     }
 
-    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata)
-        external
-        override
-        poolManagerOnly
-        returns (bytes4)
-    {
+    function afterInitialize(address, PoolKey calldata key, uint160, int24, bytes calldata) external override poolManagerOnly returns (bytes4) {
         poolsDutchAuctionIntervalInHour[key.toId()] = DUTCH_AUCTION_INTERVAL_IN_HOUR;
         return this.afterInitialize.selector;
     }
 
     // Swapping
-    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
-        external
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
-        uint256 amountInOutPositive =
-            params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
+    function beforeSwap(
+        address,
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params,
+        bytes calldata
+    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
+        uint256 amountInOutPositive = params.amountSpecified > 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified);
 
         /**
          * BalanceDelta is a packed value of (currency0Amount, currency1Amount)
@@ -146,8 +142,7 @@ contract AutoMateHook is BaseHook {
         if (_isDutchAuctionDisabled) return (this.beforeSwap.selector, beforeSwapDelta, 0);
 
         uint16 dutchAuctionIntervalInHour = poolsDutchAuctionIntervalInHour[key.toId()];
-        uint256 taskCategoryId =
-            _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
+        uint256 taskCategoryId = _autoMate.getTaskCategoryId(key, _normalizeDutchAuctionInterval(dutchAuctionIntervalInHour));
 
         // Scenario 1: if has pending task => check if auction already passed 1 hr
         //             => y: start a new auction and reset the price curve / n: auction on-going, update new calculation on price curve
@@ -155,7 +150,9 @@ contract AutoMateHook is BaseHook {
         if (_autoMate.hasPendingTaskInCategory(taskCategoryId)) {
             // need to divide by _PRICE_DROP_PRECISION in later calculation to get the actual BP
             uint256 currBPDropWithPrecision = _startNewAuctionOrAdjustPriceFactor(
-                _lastDutchAuctionStartTs, dutchAuctionIntervalInHour, _maxBPDropPerDutchAuction
+                _lastDutchAuctionStartTs,
+                dutchAuctionIntervalInHour,
+                _maxBPDropPerDutchAuction
             );
 
             // swap with custom price curve via * currBPDropWithPrecision / _PRICE_DROP_PRECISION
@@ -202,8 +199,7 @@ contract AutoMateHook is BaseHook {
         if (block.timestamp < lastDutchAuctionStartTs + dutchAuctionIntervalInHour * 1 hours) {
             // block.timestamp must be > lastDutchAuctionStartTs at this point
             uint256 hoursElapsed = block.timestamp - lastDutchAuctionStartTs / 1 hours;
-            currBPDropWithPrecision =
-                maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION / dutchAuctionIntervalInHour;
+            currBPDropWithPrecision = (maxBPDropPerDutchAuction * hoursElapsed * _PRICE_DROP_PRECISION) / dutchAuctionIntervalInHour;
         } else {
             // start a new auction & restart the custom price curve Dutch auction
             _lastDutchAuctionStartTs = uint64(block.timestamp);
@@ -211,11 +207,7 @@ contract AutoMateHook is BaseHook {
         }
     }
 
-    function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour)
-        internal
-        pure
-        returns (IAutoMate.TaskInterval)
-    {
+    function _normalizeDutchAuctionInterval(uint256 dutchAuctionIntervalInHour) internal pure returns (IAutoMate.TaskInterval) {
         if (dutchAuctionIntervalInHour == _DAILY_IN_HOUR) {
             return IAutoMate.TaskInterval.DAILY;
         } else if (dutchAuctionIntervalInHour == _WEEKLY_IN_HOUR) {
@@ -226,14 +218,14 @@ contract AutoMateHook is BaseHook {
         return IAutoMate.TaskInterval.HOURLY;
     }
 
-    function _getDiscountedInputAmount(int256 amountSpecified, uint256 currBPDropWithPrecision)
-        internal
-        pure
-        returns (int128 specifiedDiscountedInputAmount)
-    {
+    function _getDiscountedInputAmount(
+        int256 amountSpecified,
+        uint256 currBPDropWithPrecision
+    ) internal pure returns (int128 specifiedDiscountedInputAmount) {
         specifiedDiscountedInputAmount = currBPDropWithPrecision != 0
-            ? int128(-amountSpecified) * (int128(uint128(_BASIS_POINTS)) - int128(uint128(currBPDropWithPrecision)))
-                / int128(uint128(_BASIS_POINTS)) / int128(uint128(_PRICE_DROP_PRECISION))
+            ? (int128(-amountSpecified) * (int128(uint128(_BASIS_POINTS)) - int128(uint128(currBPDropWithPrecision)))) /
+                int128(uint128(_BASIS_POINTS)) /
+                int128(uint128(_PRICE_DROP_PRECISION))
             : int128(-amountSpecified);
     }
 

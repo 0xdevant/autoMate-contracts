@@ -53,13 +53,20 @@ interface IAutoMate {
     error InvalidTaskInput();
 
     function subscribeTask(PoolKey calldata key, bytes calldata taskInfo) external payable returns (uint256 taskId);
+
     function executeTask(uint256 taskCategoryId, uint256 taskIndex) external payable;
 
     function getTaskCategoryId(PoolKey calldata key, TaskInterval taskInterval) external pure returns (uint256);
+
     function hasPendingTaskInCategory(uint256 taskCategoryId) external view returns (bool);
+
     function getNumOfTasksInCategory(uint256 taskCategoryId) external view returns (uint256);
+
     function getTasksInCategory(uint256 taskCategoryId) external view returns (Task[] memory);
+
     function getTask(uint256 taskCategoryId, uint256 taskIndex) external view returns (Task memory);
+
     function getNextTaskIndex(uint256 taskCategoryId) external view returns (uint256);
+
     function getProtocolFeeBP() external view returns (uint16);
 }
