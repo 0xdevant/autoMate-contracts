@@ -27,31 +27,20 @@ import {IAutoMate} from "src/interfaces/IAutoMate.sol";
 contract TestAutoMate is AutoMateSetup {
     using PoolIdLibrary for PoolKey;
 
+    /*//////////////////////////////////////////////////////////////
+                            TASKS RELATED
+    //////////////////////////////////////////////////////////////*/
     function test_subscribeTask_CanSubscribeTask() public {
         taskId = subscribeTask();
         assertEq(taskId, 0);
     }
 
-    // function test_executeTask() public {
-    //     bytes memory taskInfo = abi.encode(
-    //         IAutoMate.TaskType.ERC20_TRANSFER,
-    //         IAutoMate.TaskInterval.DAILY,
-    //         uint40(720),
-    //         address(token0),
-    //         uint256(1000 ether),
-    //         uint256(0),
-    //         bytes("")
-    //     );
-    //     autoMate.subscribeTask(key, taskInfo);
-    //     autoMateHook.beforeSwap(
-    //         user,
-    //         key,
-    //         IPoolManager.SwapParams(true, -1000, TickMath.MIN_SQRT_PRICE + 1),
-    //         ""
-    //     );
-
-    //     assertEq(token0.balanceOf(user), 0);
-    // }
+    function test_executeTask_RevertIfNotExecutedFromHook() public {
+        taskId = subscribeTask();
+        uint256 taskCategoryId = autoMate.getTaskCategoryId(key, taskIntervalDaily);
+        vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
+        autoMate.executeTask(taskCategoryId, 0);
+    }
 
     /*//////////////////////////////////////////////////////////////
                                  ADMIN

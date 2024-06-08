@@ -122,6 +122,8 @@ contract AutoMateSetup is Test, Deployers {
             0,
             abi.encodeCall(IERC20.transfer, (user, 1 ether))
         );
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskSubscribed(address(this), 0);
         id = autoMate.subscribeTask(key, taskInfo);
     }
 }
