@@ -74,7 +74,7 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_setProtocolFeeBP_OwnerCanSetProtocolFeeBP() public {
-        // assertEq(autoMate.getProtocolFeeBP(), 100);
+        assertEq(autoMate.getProtocolFeeBP(), 100);
         autoMate.setProtocolFeeBP(4000);
         assertEq(autoMate.getProtocolFeeBP(), 4000);
     }

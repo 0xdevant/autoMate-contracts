@@ -31,7 +31,7 @@ contract AutoMate is Ownable, IAutoMate {
     }
 
     constructor(uint16 protocolFeeBP) Ownable(msg.sender) {
-        protocolFeeBP = protocolFeeBP;
+        _protocolFeeBP = protocolFeeBP;
     }
 
     function subscribeTask(PoolKey calldata key, bytes calldata taskInfo) external payable returns (uint256 taskId) {
