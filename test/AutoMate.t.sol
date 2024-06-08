@@ -18,6 +18,7 @@ import {AutoMate} from "src/AutoMate.sol";
 import {AutoMateHook} from "src/AutoMateHook.sol";
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import "src/interfaces/IAutoMate.sol";
 
@@ -56,4 +57,48 @@ contract TestAutoMate is AutoMateSetup {
 
     //     assertEq(token0.balanceOf(user), 0);
     // }
+
+    /*//////////////////////////////////////////////////////////////
+                                 ADMIN
+    //////////////////////////////////////////////////////////////*/
+    function test_SetHookAddress_RevertIfNotOwnerSetHookAddress() public {
+        vm.prank(address(1));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                address(1)
+            )
+        );
+        autoMate.setHookAddress(address(autoMateHook));
+    }
+
+    function test_SetProtocolFeeBP_RevertIfNotOwnerSetProtocolFeeBP() public {
+        vm.prank(address(1));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                address(1)
+            )
+        );
+        autoMate.setProtocolFeeBP(4000);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 VIEWS
+    //////////////////////////////////////////////////////////////*/
+    function test_GetTaskCategoryId_CanGetTaskCategroyId() public {}
+
+    function test_HasPendingTaskInCategory_CanGetGetTaskInCategoryLength()
+        public
+    {}
+
+    function test_GetNumOfTasksInCategory_CanGetNumOfTasks() public {}
+
+    function test_GetTaskInCategory_CanGetTaskInCategory() public {}
+
+    function test_GetTask_CanGetTask() public {}
+
+    function test_GetNextTaskIndex_CanGetNextTaskIndex() public {}
+
+    function test_GetProtocolFeeBP_CanGetProtocolFeeBP() public {}
 }
