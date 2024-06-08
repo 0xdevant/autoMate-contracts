@@ -194,6 +194,10 @@ contract AutoMate is Ownable, IAutoMate {
         return _taskPtrs[taskCategoryId];
     }
 
+    function getHookAddress() external view returns (address) {
+        return _hookAddress;
+    }
+
     function getProtocolFeeBP() external view returns (uint16) {
         return _protocolFeeBP;
     }

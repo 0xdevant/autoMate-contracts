@@ -67,6 +67,11 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.setHookAddress(address(autoMateHook));
     }
 
+    function test_setHookAddress_OwnerCanSetHookAddress() public {
+        autoMate.setHookAddress(address(1));
+        assertEq(autoMate.getHookAddress(), address(1));
+    }
+
     function test_setProtocolFeeBP_RevertIfNotOwnerSetProtocolFeeBP() public {
         vm.prank(address(1));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(1)));
@@ -94,5 +99,11 @@ contract TestAutoMate is AutoMateSetup {
 
     function test_getNextTaskIndex_CanGetNextTaskIndex() public {}
 
-    function test_getProtocolFeeBP_CanGetProtocolFeeBP() public {}
+    function test_getHookAddress_CanGetHookAddress() public view {
+        assertEq(autoMate.getHookAddress(), address(autoMateHook));
+    }
+
+    function test_getProtocolFeeBP_CanGetProtocolFeeBP() public view {
+        assertEq(autoMate.getProtocolFeeBP(), 100);
+    }
 }
