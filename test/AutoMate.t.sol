@@ -23,7 +23,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "src/interfaces/IAutoMate.sol";
 
 contract TestAutoMate is AutoMateSetup {
-    function test_SubscribeTask_CanSubscribeTask() public {
+    function test_subscribeTask_CanSubscribeTask() public {
         bytes memory taskInfo = abi.encode(
             IAutoMate.TaskType.ERC20_TRANSFER,
             IAutoMate.TaskInterval.DAILY,
@@ -37,7 +37,7 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(taskId, 0);
     }
 
-    // function test_ExecuteTask() public {
+    // function test_executeTask() public {
     //     bytes memory taskInfo = abi.encode(
     //         IAutoMate.TaskType.ERC20_TRANSFER,
     //         IAutoMate.TaskInterval.DAILY,
@@ -61,44 +61,32 @@ contract TestAutoMate is AutoMateSetup {
     /*//////////////////////////////////////////////////////////////
                                  ADMIN
     //////////////////////////////////////////////////////////////*/
-    function test_SetHookAddress_RevertIfNotOwnerSetHookAddress() public {
+    function test_setHookAddress_RevertIfNotOwnerSetHookAddress() public {
         vm.prank(address(1));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                address(1)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(1)));
         autoMate.setHookAddress(address(autoMateHook));
     }
 
-    function test_SetProtocolFeeBP_RevertIfNotOwnerSetProtocolFeeBP() public {
+    function test_setProtocolFeeBP_RevertIfNotOwnerSetProtocolFeeBP() public {
         vm.prank(address(1));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                address(1)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(1)));
         autoMate.setProtocolFeeBP(4000);
     }
 
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
     //////////////////////////////////////////////////////////////*/
-    function test_GetTaskCategoryId_CanGetTaskCategroyId() public {}
+    function test_getTaskCategoryId_CanGetTaskCategroyId() public {}
 
-    function test_HasPendingTaskInCategory_CanGetGetTaskInCategoryLength()
-        public
-    {}
+    function test_hasPendingTaskInCategory_CanGetGetTaskInCategoryLength() public {}
 
-    function test_GetNumOfTasksInCategory_CanGetNumOfTasks() public {}
+    function test_getNumOfTasksInCategory_CanGetNumOfTasks() public {}
 
-    function test_GetTaskInCategory_CanGetTaskInCategory() public {}
+    function test_getTaskInCategory_CanGetTaskInCategory() public {}
 
-    function test_GetTask_CanGetTask() public {}
+    function test_getTask_CanGetTask() public {}
 
-    function test_GetNextTaskIndex_CanGetNextTaskIndex() public {}
+    function test_getNextTaskIndex_CanGetNextTaskIndex() public {}
 
-    function test_GetProtocolFeeBP_CanGetProtocolFeeBP() public {}
+    function test_getProtocolFeeBP_CanGetProtocolFeeBP() public {}
 }
