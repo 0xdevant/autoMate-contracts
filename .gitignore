@@ -10,8 +10,5 @@ out/
 # Docs
 docs/
 
-# Archived files
-.archive/
-
 # Dotenv file
 .env
