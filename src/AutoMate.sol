@@ -3,16 +3,19 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
+import {AutoMateEIP712} from "./AutoMateEIP712.sol";
 import {IAutoMate} from "./interfaces/IAutoMate.sol";
-// import {IAutoMateHook} from "./interfaces/IAutoMateHook.sol";
 
-contract AutoMate is Ownable, IAutoMate {
+contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     using PoolIdLibrary for PoolKey;
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
+    bytes32 private constant _SWAPPER_TYPEHASH = keccak256("Swapper(address executor)");
     uint256 private constant _BASIS_POINTS = 10000;
     // uint256 private constant _MIN_ERC20_BOUNTY = 1e18;
 
@@ -34,7 +37,7 @@ contract AutoMate is Ownable, IAutoMate {
         _;
     }
 
-    constructor(uint16 protocolFeeBP) Ownable(msg.sender) {
+    constructor(uint16 protocolFeeBP) Ownable(msg.sender) AutoMateEIP712("AutoMate", "1") {
         _protocolFeeBP = protocolFeeBP;
     }
 
@@ -60,7 +63,10 @@ contract AutoMate is Ownable, IAutoMate {
     }
 
     /// @dev execute task based on the index found on task that can be executed closest to its scheduleAt(JIT)
-    function executeTask(address executor) external payable onlyFromHook {
+    function executeTask(bytes calldata hookData) external payable onlyFromHook {
+        // verify the swapper is indeed the executor address via signature passed through hook data
+        (Swapper memory swapper, bytes memory sig) = abi.decode(hookData, (Swapper, bytes));
+
         (uint256 closestToJITIdx, uint256 activeStartingIdx) = _tryGetClosestToJITIdx(_activeTaskStartingIdx);
         Task memory task = _tasks[closestToJITIdx];
 
@@ -71,9 +77,9 @@ contract AutoMate is Ownable, IAutoMate {
 
         // task still accessible after pop
         _executeTaskBasedOnTaskType(task);
-        _distributeBountyBasedOnExecutionTime(task, executor);
+        _distributeBountyBasedOnExecutionTime(task, swapper, sig);
 
-        emit TaskExecuted(executor, task.id);
+        emit TaskExecuted(swapper.executor, task.id);
     }
 
     function redeemFromExpiredTask(uint256 taskIdx) external {
@@ -162,13 +168,19 @@ contract AutoMate is Ownable, IAutoMate {
         }
     }
 
-    function _distributeBountyBasedOnExecutionTime(Task memory task, address executor) internal {
+    function _distributeBountyBasedOnExecutionTime(Task memory task, Swapper memory swapper, bytes memory sig)
+        internal
+    {
         // block.timestamp must be <= task.scheduleAt at this point
         uint256 minsBeforeJIT = (task.scheduleAt - block.timestamp) / 1 minutes;
         uint256 finalBounty =
             task.jitBounty - (task.jitBounty * minsBeforeJIT * _bountyDecayBPPerMinute / _BASIS_POINTS);
 
-        payable(executor).transfer(finalBounty);
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(_SWAPPER_TYPEHASH, swapper.executor)));
+        if (digest.recover(sig) != swapper.executor) revert InvalidSwapperFromHookData();
+
+        // transfer bounty to executor
+        payable(swapper.executor).transfer(finalBounty);
         // transfer remaining bounty back to subscriber
         if (task.jitBounty > finalBounty) payable(task.subscriber).transfer(task.jitBounty - finalBounty);
     }

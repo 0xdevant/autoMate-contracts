@@ -44,12 +44,12 @@ contract AutoMateHook is BaseHook {
     }
 
     // Swapping
-    function beforeSwap(address sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata hookData)
         external
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        _autoMate.executeTask(sender);
+        _autoMate.executeTask(hookData);
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 }

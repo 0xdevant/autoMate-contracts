@@ -42,7 +42,7 @@ contract AutoMateSetup is Test, Deployers {
     IPoolManager public poolManager;
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
-    address public cat = makeAddr("cat");
+    address public cat = vm.addr(1);
 
     // Variables for AutoMate test cases
     uint256 taskId;

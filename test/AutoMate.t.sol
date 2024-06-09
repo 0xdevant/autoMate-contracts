@@ -38,7 +38,7 @@ contract TestAutoMate is AutoMateSetup {
     function test_executeTask_RevertIfNotExecutedFromHook() public {
         taskId = subscribeTask();
         vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
-        autoMate.executeTask(address(this));
+        autoMate.executeTask("");
     }
 
     /*//////////////////////////////////////////////////////////////
