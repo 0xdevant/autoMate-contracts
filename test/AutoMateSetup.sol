@@ -28,11 +28,16 @@ contract AutoMateSetup is Test, Deployers {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
 
-    uint256 private constant _BASIS_POINTS = 10000;
-
+    /*//////////////////////////////////////////////////////////////
+                            STATE VARIABLES
+    //////////////////////////////////////////////////////////////*/
+    // Contracts
     AutoMate public autoMate;
     AutoMateHook public autoMateHook;
     PoolId public poolId;
+
+    uint256 private constant _BASIS_POINTS = 10000;
+    bytes32 private constant _SWAPPER_TYPEHASH = keccak256("Swapper(address executor)");
 
     // Native tokens are represented by address(0)
     Currency ethCurrency = Currency.wrap(address(0));
@@ -40,17 +45,29 @@ contract AutoMateSetup is Test, Deployers {
     MockERC20 token1;
 
     IPoolManager public poolManager;
-    address public alice = makeAddr("alice");
-    address public bob = makeAddr("bob");
-    address public cat = vm.addr(1);
 
-    // Variables for AutoMate test cases
+    // Users
+    mapping(uint256 userId => uint256 privateKey) public userPrivateKeys;
+    address public alice;
+    address public bob;
+    address public cat;
+
+    // For AutoMate test cases
     uint256 taskId;
     uint256 defaultBounty = 1 ether;
 
     // receive the bounty if any
     fallback() external payable {}
 
+    modifier userPrank(address user) {
+        vm.startPrank(user);
+        _;
+        vm.stopPrank();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               SETUP
+    //////////////////////////////////////////////////////////////*/
     function setUp() public {
         // 1) Deploy v4 core contracts (PoolManager, periphery Router contracts for swapping, modifying liquidity etc)
         deployFreshManagerAndRouters();
@@ -74,7 +91,7 @@ contract AutoMateSetup is Test, Deployers {
         autoMate.setHookAddress(address(autoMateHook));
 
         // 6) Initialize a pool with these two tokens
-        (key,) = initPool(
+        (key, ) = initPool(
             currency0,
             currency1,
             autoMateHook, // Hook Contract
@@ -113,41 +130,82 @@ contract AutoMateSetup is Test, Deployers {
             }),
             ZERO_BYTES
         );
+
+        // 8) Set up users
+        setUpUsers();
+    }
+
+    function setUpUsers() public {
+        // Private Keys
+        userPrivateKeys[0] = 1;
+        userPrivateKeys[1] = 2;
+        userPrivateKeys[2] = 3;
+
+        // Addresses
+        alice = vm.addr(userPrivateKeys[0]);
+        bob = vm.addr(userPrivateKeys[1]);
+        cat = vm.addr(userPrivateKeys[2]);
+        vm.label(alice, "alice");
+        vm.label(bob, "bob");
+        vm.label(cat, "cat");
+
+        // ETH distribution
+        deal(alice, 1.01 ether);
+        deal(bob, 1 ether);
+        deal(cat, 1 ether);
+
+        // Token distribution
+        deal(address(token0), alice, 10000 ether);
+        deal(address(token0), cat, 10000 ether);
     }
 
     /*//////////////////////////////////////////////////////////////
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
-    function subscribeTask() public returns (uint256 id) {
-        uint256 protocolFee = defaultBounty * autoMate.getProtocolFeeBP() / _BASIS_POINTS;
-
+    /// @dev subscribe task with specific user
+    function subscribeTaskBy(address subscriber, uint256 transferAmount) public userPrank(subscriber) returns (uint256 id) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
             uint64(block.timestamp + 60),
-            1000 ether,
+            transferAmount,
             abi.encodeCall(IERC20.transfer, (bob, 1 ether))
         );
-        vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(this), 0);
-        id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
-    }
+        uint256 protocolFee = (defaultBounty * autoMate.getProtocolFeeBP()) / _BASIS_POINTS;
 
-    function subscribeTaskBy(address subscriber) public returns (uint256 id) {
-        bytes memory taskInfo = abi.encode(
-            defaultBounty,
-            IAutoMate.TaskType.ERC20_TRANSFER,
-            address(token0),
-            uint64(block.timestamp + 60),
-            1000 ether,
-            abi.encodeCall(IERC20.transfer, (bob, 1 ether))
-        );
-        uint256 protocolFee = defaultBounty * autoMate.getProtocolFeeBP() / _BASIS_POINTS;
-
-        vm.prank(subscriber);
+        IERC20(address(token0)).approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), 0);
         id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    /// @dev get permit signature for a swapper
+    function getPermitSignature(
+        IAutoMate.Swapper memory swapper,
+        uint256 privateKey,
+        bytes32 domainSeparator
+    ) public pure returns (bytes memory sig) {
+        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignatureRaw(swapper, privateKey, domainSeparator);
+        return bytes.concat(r, s, bytes1(v));
+    }
+
+    function _getPermitSignatureRaw(
+        IAutoMate.Swapper memory swapper,
+        uint256 privateKey,
+        bytes32 domainSeparator
+    ) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 msgHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, _hash(swapper)));
+
+        (v, r, s) = vm.sign(privateKey, msgHash);
+    }
+
+    // computes the hash of a permit
+    function _hash(IAutoMate.Swapper memory swapper) internal pure returns (bytes32) {
+        return keccak256(abi.encode(_SWAPPER_TYPEHASH, swapper.executor));
+    }
+
+    function _normalize(uint256 amount) internal pure returns (uint256) {
+        return amount / 10 ** 18;
     }
 }

@@ -26,7 +26,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     uint256 private _taskIdCounter;
 
     address private _hookAddress;
-    uint16 private _protocolFeeBP = 100; // 1%
+    uint16 private _protocolFeeBP;
     /// @dev 1% decay on jitBounty per minute based on how close the execution time is to the scheduled time
     uint16 private _bountyDecayBPPerMinute = 100; // 1%
 

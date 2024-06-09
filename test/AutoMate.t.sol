@@ -31,12 +31,14 @@ contract TestAutoMate is AutoMateSetup {
                             TASKS RELATED
     //////////////////////////////////////////////////////////////*/
     function test_subscribeTask_CanSubscribeTask() public {
-        taskId = subscribeTask();
+        assertEq(alice.balance, 1.01 ether);
+        taskId = subscribeTaskBy(alice, 1000 ether);
         assertEq(taskId, 0);
+        assertEq(alice.balance, 0);
     }
 
     function test_executeTask_RevertIfNotExecutedFromHook() public {
-        taskId = subscribeTask();
+        taskId = subscribeTaskBy(address(this), 1000 ether);
         vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
         autoMate.executeTask("");
     }
@@ -72,13 +74,13 @@ contract TestAutoMate is AutoMateSetup {
     //////////////////////////////////////////////////////////////*/
     function test_hasPendingTask_ReturnTrueIfThereIsPendingTask() public {
         assertFalse(autoMate.hasPendingTask());
-        subscribeTask();
+        subscribeTaskBy(address(this), 1000 ether);
         assertTrue(autoMate.hasPendingTask());
     }
 
     function test_getNumOfTasks_CanGetNumOfTasks() public {
         assertEq(autoMate.getNumOfTasks(), 0);
-        subscribeTask();
+        subscribeTaskBy(address(this), 1000 ether);
         assertEq(autoMate.getNumOfTasks(), 1);
     }
 
@@ -87,7 +89,7 @@ contract TestAutoMate is AutoMateSetup {
 
         // No tasks before subscribing
         assertEq(tasks.length, 0);
-        subscribeTask();
+        subscribeTaskBy(address(this), 1000 ether);
 
         uint256 callAmount = 1000 ether;
         uint64 scheduleAt = uint64(block.timestamp + 60);
@@ -108,7 +110,7 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_getTask_CanGetTaskDetails() public {
-        subscribeTask();
+        subscribeTaskBy(address(this), 1000 ether);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
         uint256 callAmount = 1000 ether;
         uint64 scheduleAt = uint64(block.timestamp + 60);
