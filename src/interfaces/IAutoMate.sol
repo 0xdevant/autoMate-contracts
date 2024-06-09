@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-
 interface IAutoMate {
-    // not support normal contract call for now
+    // not support plain contract call for now
     enum TaskType {
         NATIVE_TRANSFER,
         ERC20_TRANSFER,
@@ -12,61 +10,45 @@ interface IAutoMate {
         CONTRACT_CALL_WITH_ERC20
     }
 
-    enum TaskInterval {
-        HOURLY,
-        DAILY,
-        WEEKLY,
-        MONTHLY
-    }
-
     /// @param id The ID of the task
     /// @param subscriber The address that subscribed to the task
+    /// @param jitBounty The max amount of Ethers to be paid to the executor if the task is executed JIT
     /// @param taskType The type of the task
-    /// @param taskInterval The interval in between if it's a recurring task
-    /// @param lastRunTs The timestamp of the last time the task was executed
-    /// @param lastForInHours The duration in hours that the task will last for
     /// @param callingAddress The address that the task will call to
-    /// @param totalAmounts The total amount of tokens involved in the task
-    /// @param totalValues The total amount of Ethers involved in the task
-    /// @param amountForEachRun The amount of tokens/Ethers to be transferred for each run
+    /// @param scheduleAt The timestamp of the time the task need to be executed, executor will be able to claim the max bounty if the task is executed just in time(JIT)
+    /// @param callAmount The amount of tokens/Ethers involved in the task
     /// @param callData The call data to be passed to the callingAddress
     struct Task {
         uint256 id;
         address subscriber;
+        uint256 jitBounty;
         TaskType taskType;
-        TaskInterval taskInterval;
-        uint40 lastRunTs;
-        uint40 lastForInHours;
         address callingAddress;
-        uint256 totalAmounts;
-        uint256 totalValues;
-        uint256 amountForEachRun;
+        uint64 scheduleAt;
+        uint256 callAmount;
         bytes callData;
     }
 
     event TaskSubscribed(address indexed subscriber, uint256 taskId);
+    event TaskExecuted(address indexed executor, uint256 taskId);
 
     error OnlyFromAuthorizedHook();
-    error ExceedsMaxInterval();
-    error InsufficientFunds();
+    error OnlyFromTaskSubscriber();
+    error InsufficientSetupFunds();
+    error InsufficientTaskFunds();
     error TaskFailed(bytes data);
     error InvalidTaskInput();
+    error InvalidProtocolFeeBP();
+    error InvalidBountyDecayBPPerMinute();
+    error AllTasksExpired();
+    error TaskNotExpiredYet();
 
-    function subscribeTask(PoolKey calldata key, bytes calldata taskInfo) external payable returns (uint256 taskId);
+    function subscribeTask(bytes calldata taskInfo) external payable returns (uint256 taskId);
+    function executeTask(address executor) external payable;
 
-    function executeTask(uint256 taskCategoryId, uint256 taskIndex) external payable;
-
-    function getTaskCategoryId(PoolKey calldata key, TaskInterval taskInterval) external pure returns (uint256);
-
-    function hasPendingTaskInCategory(uint256 taskCategoryId) external view returns (bool);
-
-    function getNumOfTasksInCategory(uint256 taskCategoryId) external view returns (uint256);
-
-    function getTasksInCategory(uint256 taskCategoryId) external view returns (Task[] memory);
-
-    function getTask(uint256 taskCategoryId, uint256 taskIndex) external view returns (Task memory);
-
-    function getNextTaskIndex(uint256 taskCategoryId) external view returns (uint256);
-
+    function hasPendingTask() external view returns (bool);
+    function getNumOfTasks() external view returns (uint256);
+    function getTask(uint256 taskIndex) external view returns (Task memory);
+    function getHookAddress() external view returns (address);
     function getProtocolFeeBP() external view returns (uint16);
 }
