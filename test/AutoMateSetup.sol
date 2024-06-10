@@ -40,7 +40,7 @@ contract AutoMateSetup is Test, Deployers {
     PoolId public poolId;
     Disperse public disperse;
 
-    uint256 private constant _BASIS_POINTS = 10000;
+    uint256 public constant _BASIS_POINTS = 10000;
     bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
 
     // Native tokens are represented by address(0)

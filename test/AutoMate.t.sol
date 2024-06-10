@@ -78,9 +78,12 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    function test_subscribeTask_RevertIfJITBountyIs0() public userPrank(alice) {
+    function test_subscribeTask_RevertIfJITBountyIsLessThanMinimum() public userPrank(alice) {
+        uint256 jitBounty = 0.009 ether;
+        protocolFee = (jitBounty * defaultProtocolFeeBP) / _BASIS_POINTS;
+
         bytes memory taskInfo = abi.encode(
-            0, // JITBounty
+            jitBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
             address(token0),
@@ -90,7 +93,7 @@ contract TestAutoMate is AutoMateSetup {
         );
         IERC20(address(token0)).approve(address(autoMate), 1000 ether);
         vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
-        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+        autoMate.subscribeTask{value: jitBounty + protocolFee}(taskInfo);
     }
 
     function test_subscribeTask_RevertIfCallAmountIs0() public userPrank(alice) {

@@ -17,7 +17,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
 
     bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
     uint256 private constant _BASIS_POINTS = 10000;
-    // uint256 private constant _MIN_ERC20_BOUNTY = 1e18;
+    uint256 private constant _MIN_BOUNTY = 0.01 ether;
 
     Task[] private _tasks;
     /// @dev This is to save gas from needing to loop through expired tasks to get the next active task index, since there could be expired tasks still being stored in the array
@@ -124,7 +124,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
                 || (
                     (taskType != TaskType.NATIVE_TRANSFER && taskType != TaskType.CONTRACT_CALL_WITH_NATIVE)
                         && tokenAddress == address(0)
-                ) || callingAddress == address(0) || jitBounty == 0 || callAmount == 0
+                ) || callingAddress == address(0) || jitBounty < _MIN_BOUNTY || callAmount == 0
                 || (taskType != TaskType.NATIVE_TRANSFER && callData.length == 0)
         ) {
             revert InvalidTaskInput();
