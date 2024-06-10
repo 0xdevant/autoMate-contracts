@@ -49,7 +49,11 @@ contract AutoMateHook is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        if (hookData.length != 0) _autoMate.executeTask(hookData);
+        if (hookData.length != 0) {
+            // just do normal swap if there is no active task
+            if (!_autoMate.hasActiveTask()) return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            _autoMate.executeTask(hookData);
+        }
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 }

@@ -235,6 +235,18 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         return _tasks.length > 0;
     }
 
+    function hasActiveTask() external view returns (bool) {
+        if (_tasks.length == 0) return false;
+
+        for (uint256 i; i < _tasks.length; i++) {
+            // task not expired yet
+            if (block.timestamp <= _tasks[i].scheduleAt) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function getNumOfTasks() external view returns (uint256) {
         return _tasks.length;
     }

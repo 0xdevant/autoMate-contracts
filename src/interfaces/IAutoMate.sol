@@ -53,6 +53,7 @@ interface IAutoMate {
     function executeTask(bytes calldata hookData) external payable;
 
     function hasPendingTask() external view returns (bool);
+    function hasActiveTask() external view returns (bool);
     function getNumOfTasks() external view returns (uint256);
     function getTask(uint256 taskIndex) external view returns (Task memory);
     function getHookAddress() external view returns (address);

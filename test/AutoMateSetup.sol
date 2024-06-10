@@ -319,8 +319,6 @@ contract AutoMateSetup is Test, Deployers {
         } else {
             token1.approve(address(swapRouter), type(uint256).max);
         }
-        vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskExecuted(searcher, 0);
         BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
         assertEq(int256(swapDelta.amount0()), amountSpecified);
     }

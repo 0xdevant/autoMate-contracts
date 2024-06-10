@@ -4,10 +4,6 @@ pragma solidity ^0.8.25;
 import "forge-std/console2.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
-import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
-
-import {PoolManager} from "v4-core/PoolManager.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
@@ -19,7 +15,7 @@ import {AutoMate} from "src/AutoMate.sol";
 import "src/interfaces/IAutoMate.sol";
 
 contract TestAutoMateHook is AutoMateSetup {
-    function test_swapWithoutExecuteTask() public {
+    function test_swapWithoutExecuteTask_WithEmptyHookData() public {
         // Subscribed task will not be executed
         subscribeERC20TransferTaskBy(alice, defaultTransferAmount);
 
@@ -37,6 +33,17 @@ contract TestAutoMateHook is AutoMateSetup {
         // Cat didn't receive bounty, remaining its 1 ether balance
         assertEq(cat.balance, 1 ether);
         // Bob didn't receive 1000 token0 from scheduled task
+        assertEq(token0.balanceOf(bob), 0);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
+    function test_swap_SwapNormallyWhenEmptyTasks() public {
+        swapToken(cat, block.timestamp + 50 minutes, true, -1e18);
+
+        // Didn't execute any task, all user data remain same
+        assertEq(alice.balance, 110 ether);
+        assertEq(cat.balance, 1 ether);
         assertEq(token0.balanceOf(bob), 0);
         // Cat's token0 balance reduced by 1 after swap
         assertEq(token0.balanceOf(cat), 9999 ether);
