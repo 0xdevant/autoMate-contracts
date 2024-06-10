@@ -200,7 +200,7 @@ contract TestAutoMate is AutoMateSetup {
     function test_subscribeTask_CanSubscribeContractCallWithERC20Task() public {
         // Bounty 10 ether -> Protocol fee 1 ether (10%)
         uint256 bounty = 10 ether;
-        // Task: Disperse 10, 20, 30 ether to bob, cat, derek respectively
+        // Task: Disperse 10, 20, 30 units of token0 to bob, cat, derek respectively
         uint256 scheduledTransferAmount = 60 ether;
 
         assertEq(token0.balanceOf(alice), 10000 ether);
@@ -386,6 +386,116 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(cat), 9999 ether);
         // Derek received 30 eth from task
         assertEq(derek.balance, 30 ether);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            REDEEM EXPIRED TASK
+    //////////////////////////////////////////////////////////////*/
+    function test_redeemFromExpiredTask_RevertIfTaskDoesNotExist() public {
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.redeemFromExpiredTask(0);
+    }
+
+    function test_redeemFromExpiredTask_RevertIfTaskHasntExpired() public {
+        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        vm.expectRevert(IAutoMate.TaskNotExpiredYet.selector);
+        autoMate.redeemFromExpiredTask(0);
+    }
+
+    function test_redeemFromExpiredTask_RevertIfNotRedeemedBySubscriber() public {
+        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(bob);
+        vm.expectRevert(IAutoMate.OnlyFromTaskSubscriber.selector);
+        autoMate.redeemFromExpiredTask(0);
+    }
+
+    function test_redeemFromExpiredTask_CanRedeemForNativeTransfer() public {
+        // Native Transfer -> Refund JIT Bounty + Task's transfer Amount in eth
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        // Before subscription
+        assertEq(alice.balance, 110 ether);
+        subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+        // After subscription = 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
+
+        // Expired by 1 second
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        vm.prank(alice);
+        autoMate.redeemFromExpiredTask(0);
+        // Redeemed = 79 + 10 + 20 = 109;
+        assertEq(alice.balance, 109 ether);
+    }
+
+    function test_redeemFromExpiredTask_CanRedeemForERC20Transfer() public {
+        // ERC20 Transfer -> Refund JIT Bounty + Task's transfer amount in ERC20
+        assertEq(alice.balance, 110 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+        // Default bounty = 100 ether
+        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        assertEq(alice.balance, 0); // 110 - 100 bounty - 10 protocol fee = 0
+        assertEq(token0.balanceOf(alice), 9000 ether); // 10000 - 1000 for task
+
+        // Expired by 1 second
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        vm.prank(alice);
+        autoMate.redeemFromExpiredTask(0);
+        assertEq(alice.balance, 100 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+    }
+
+    function test_redeemFromExpiredTask_CanRedeemForContractCallWithNative() public {
+        // Native Transfer -> Refund JIT Bounty + Task's contract call amount in eth
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Disperse 10, 20, 30 eth to bob, cat, derek respectively
+        uint256 scheduledTransferAmount = 60 ether;
+
+        assertEq(alice.balance, 110 ether);
+        subscribeContractCallWithNativeTaskBy(alice, bounty, scheduledTransferAmount);
+        // After subscription = 110 - 10 - 1 - 60
+        assertEq(alice.balance, 39 ether);
+
+        // Expired by 1 second
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        vm.prank(alice);
+        autoMate.redeemFromExpiredTask(0);
+        // Redeemed = 39 + 10 + 60 = 109;
+        assertEq(alice.balance, 109 ether);
+    }
+
+    function test_redeemFromExpiredTask_CanRedeemForContractCallWithERC20() public {
+        // Native Transfer -> Refund JIT Bounty + Task's contract call amount in ERC20
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Disperse 10, 20, 30 units of token0 to bob, cat, derek respectively
+        uint256 scheduledTransferAmount = 60 ether;
+
+        // Before subscription
+        assertEq(alice.balance, 110 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+        subscribeContractCallWithERC20TaskBy(alice, bounty, scheduledTransferAmount);
+        // After subscription
+        // 110 - 10 - 1
+        assertEq(alice.balance, 99 ether);
+        // 10000 - 60
+        assertEq(token0.balanceOf(alice), 9940 ether);
+
+        // Expired by 1 second
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        vm.prank(alice);
+        autoMate.redeemFromExpiredTask(0);
+        // Redeemed = 99 + 10 = 109;
+        assertEq(alice.balance, 109 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
     }
 
     /*//////////////////////////////////////////////////////////////

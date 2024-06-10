@@ -92,6 +92,8 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     }
 
     function redeemFromExpiredTask(uint256 taskIdx) external {
+        if (taskIdx >= _tasks.length) revert InvalidTaskInput();
+
         Task memory task = _tasks[taskIdx];
         if (block.timestamp <= task.scheduleAt) {
             revert TaskNotExpiredYet();
@@ -219,7 +221,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         }
         if (task.taskType == TaskType.ERC20_TRANSFER || task.taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
             payable(task.subscriber).transfer(task.jitBounty);
-            IERC20(task.callingAddress).safeTransfer(task.subscriber, task.callAmount);
+            IERC20(task.tokenAddress).safeTransfer(task.subscriber, task.callAmount);
         }
     }
 
