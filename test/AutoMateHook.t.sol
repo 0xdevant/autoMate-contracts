@@ -81,19 +81,21 @@ contract TestAutoMateHook is AutoMateSetup {
     }
 
     function test_beforeSwap_TaskExecutedBeforeSwap() public {
-        vm.startPrank(cat);
-        IERC20(address(token0)).approve(address(autoMate), 10000 ether);
-        IERC20(address(token0)).approve(address(swapRouter), 10000 ether);
-        vm.stopPrank();
+        approveNecessarySpenders(cat, 10000 ether);
 
         console2.log("### BEFORE SUB ###");
         console2.log("eth balanceOf(alice):", alice.balance);
         console2.log("token 0 balanceOf(alice):", _normalize(token0.balanceOf(alice)));
+        assertEq(alice.balance, 1.01 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+
         subscribeTaskBy(alice, 1000 ether);
 
         console2.log("\n ### AFTER SUB ###");
         console2.log("eth balanceOf(alice):", alice.balance);
         console2.log("token 0 balanceOf(alice):", _normalize(token0.balanceOf(alice)));
+        assertEq(alice.balance, 0);
+        assertEq(token0.balanceOf(alice), 9000 ether);
 
         console2.log("\n ### BEFORE SWAP ###");
         console2.log("eth balanceOf(alice):", alice.balance);
@@ -111,6 +113,7 @@ contract TestAutoMateHook is AutoMateSetup {
         bytes memory sig = getEIP712Signature(claimBounty, userPrivateKeys[2], autoMate.DOMAIN_SEPARATOR());
         bytes memory encodedHookData = abi.encode(claimBounty, sig);
 
+        approveNecessarySpenders(cat, 10000 ether);
         vm.prank(cat);
         BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
         // ------------------- //
