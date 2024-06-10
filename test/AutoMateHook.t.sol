@@ -57,6 +57,8 @@ contract TestAutoMateHook is AutoMateSetup {
 
         vm.startPrank(cat);
         IERC20(address(token0)).approve(address(swapRouter), defaultTransferAmount);
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskExecuted(cat, 0);
         BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
         vm.stopPrank();
         // ------------------- //

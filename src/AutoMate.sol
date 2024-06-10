@@ -55,7 +55,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
             bytes memory callData
         ) = abi.decode(taskInfo, (uint256, TaskType, address, uint64, uint256, bytes));
 
-        _sanityCheck(scheduleAt, callingAddress, jitBounty, callAmount);
+        _sanityCheck(scheduleAt, callingAddress, jitBounty, callAmount, callData);
         _setupForTask(taskType, callingAddress, jitBounty, callAmount);
 
         taskId = _taskIdCounter++; // starts at 0
@@ -103,11 +103,16 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     /*//////////////////////////////////////////////////////////////
                                INTERNALS
     //////////////////////////////////////////////////////////////*/
-    function _sanityCheck(uint64 scheduleAt, address callingAddress, uint256 jitBounty, uint256 callAmount)
-        internal
-        pure
-    {
-        if (scheduleAt == 0 || callingAddress == address(0) || jitBounty == 0 || callAmount == 0) {
+    function _sanityCheck(
+        uint64 scheduleAt,
+        address callingAddress,
+        uint256 jitBounty,
+        uint256 callAmount,
+        bytes memory callData
+    ) internal pure {
+        if (
+            scheduleAt == 0 || callingAddress == address(0) || jitBounty == 0 || callAmount == 0 || callData.length == 0
+        ) {
             revert InvalidTaskInput();
         }
     }

@@ -32,6 +32,91 @@ contract TestAutoMate is AutoMateSetup {
     /*//////////////////////////////////////////////////////////////
                             TASKS RELATED
     //////////////////////////////////////////////////////////////*/
+    function test_subscribeTask_RevertIfScheduleAtIs0() public {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            0, // scheduleAt
+            1000 ether,
+            abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
+        );
+        IERC20(address(token0)).approve(address(autoMate), 1000 ether);
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfCallingAddressIs0() public {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(0), // callingAddress
+            uint64(block.timestamp + 1 hours),
+            1000 ether,
+            abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
+        );
+        IERC20(address(token0)).approve(address(autoMate), 1000 ether);
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfJITBountyIs0() public {
+        bytes memory taskInfo = abi.encode(
+            0, // JITBounty
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours),
+            1000 ether,
+            abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
+        );
+        IERC20(address(token0)).approve(address(autoMate), 1000 ether);
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfCallAmountIs0() public {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours),
+            0, // callAmount
+            abi.encodeCall(IERC20.transfer, (bob, 0))
+        );
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfCallDataIsEmpty() public {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours),
+            1000,
+            "" // callData
+        );
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfInsufficientFundForProtocolFee() public userPrank(alice) {
+        // Bounty = 110 -> Protocol fee = 11 ether (10%)
+        // MinRequiredAmount = 121 ether; But Alice has 110 ether only
+        uint256 bounty = 110 ether;
+        bytes memory taskInfo = abi.encode(
+            bounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours),
+            1000,
+            abi.encodeCall(IERC20.transfer, (bob, 0))
+        );
+        IERC20(address(token0)).approve(address(autoMate), 1000 ether);
+        vm.expectRevert(IAutoMate.InsufficientSetupFunds.selector);
+        autoMate.subscribeTask{value: bounty}(taskInfo);
+    }
+
     function test_subscribeTask_CanSubscribeTask() public {
         uint256 scheduledTransferAmount = 1000 ether;
 
@@ -91,6 +176,8 @@ contract TestAutoMate is AutoMateSetup {
 
         approveNecessarySpenders(cat, 10000 ether);
         vm.prank(cat);
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskExecuted(cat, 0);
         BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
         // ------------------- //
 
