@@ -26,7 +26,7 @@ contract TestAutoMateHook is AutoMateSetup {
         console2.log("eth balanceOf(alice):", _normalize(beforeSubETHBalanceAlice));
         console2.log("token 0 balanceOf(alice):", _normalize(beforeSubTokenBalanceAlice));
 
-        subscribeTaskBy(alice, defaultTransferAmount);
+        subscribeERC20TransferTaskBy(alice, defaultTransferAmount);
 
         uint256 afterSubETHBalanceAlice = alice.balance;
         uint256 afterSubTokenBalanceAlice = token0.balanceOf(alice);

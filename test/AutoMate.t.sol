@@ -136,7 +136,7 @@ contract TestAutoMate is AutoMateSetup {
 
         assertEq(alice.balance, 110 ether);
         assertEq(token0.balanceOf(alice), 10000 ether);
-        taskId = subscribeTaskBy(alice, scheduledTransferAmount);
+        taskId = subscribeERC20TransferTaskBy(alice, scheduledTransferAmount);
         assertEq(taskId, 0);
         assertEq(alice.balance, 0);
         assertEq(token0.balanceOf(alice), 9000 ether);
@@ -181,12 +181,8 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(alice), 9940 ether);
     }
 
-        // 110 - 10 - 1 - 20
-        assertEq(alice.balance, 79 ether);
-    }
-
     function test_executeTask_RevertIfNotExecutedFromHook() public {
-        taskId = subscribeTaskBy(address(this), 1000 ether);
+        taskId = subscribeERC20TransferTaskBy(address(this), 1000 ether);
         vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
         autoMate.executeTask("");
     }
@@ -199,7 +195,7 @@ contract TestAutoMate is AutoMateSetup {
         // Alice subscribes task with 1 ether JIT Bounty
         // Transfer 1 ether + 0.01 ether (Protocol fee)
         // Task: Transfer 1000 token0 to Bob after 1 minute
-        subscribeTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, 1000 ether);
 
         // Alice balance after subscription
         assertEq(alice.balance, 0);
@@ -287,13 +283,13 @@ contract TestAutoMate is AutoMateSetup {
     //////////////////////////////////////////////////////////////*/
     function test_hasPendingTask_ReturnTrueIfThereIsPendingTask() public {
         assertFalse(autoMate.hasPendingTask());
-        subscribeTaskBy(address(this), 1000 ether);
+        subscribeERC20TransferTaskBy(address(this), 1000 ether);
         assertTrue(autoMate.hasPendingTask());
     }
 
     function test_getNumOfTasks_CanGetNumOfTasks() public {
         assertEq(autoMate.getNumOfTasks(), 0);
-        subscribeTaskBy(address(this), 1000 ether);
+        subscribeERC20TransferTaskBy(address(this), 1000 ether);
         assertEq(autoMate.getNumOfTasks(), 1);
     }
 
@@ -302,7 +298,7 @@ contract TestAutoMate is AutoMateSetup {
 
         // No tasks before subscribing
         assertEq(tasks.length, 0);
-        subscribeTaskBy(address(this), defaultTransferAmount);
+        subscribeERC20TransferTaskBy(address(this), defaultTransferAmount);
 
         tasks = autoMate.getTasks();
 
@@ -320,7 +316,7 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_getTask_CanGetTaskDetails() public {
-        subscribeTaskBy(address(this), defaultTransferAmount);
+        subscribeERC20TransferTaskBy(address(this), defaultTransferAmount);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
 
         assertEq(task.id, taskId);

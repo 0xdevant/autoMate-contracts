@@ -183,27 +183,7 @@ contract AutoMateSetup is Test, Deployers {
     /*//////////////////////////////////////////////////////////////
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
-    /// @dev subscribe task (ERC20 Transfer) with specific user
-    function subscribeTaskBy(address subscriber, uint256 transferAmount)
-        public
-        userPrank(subscriber)
-        returns (uint256 id)
-    {
-        bytes memory taskInfo = abi.encode(
-            defaultBounty,
-            IAutoMate.TaskType.ERC20_TRANSFER,
-            address(token0),
-            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
-            transferAmount,
-            abi.encodeCall(IERC20.transfer, (bob, transferAmount))
-        );
-
-        token0.approve(address(autoMate), transferAmount);
-        vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
-        id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
-    }
-
+    /// @dev subscribe Native Transfer task with specific user
     function subscribeNativeTransferTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
         public
         userPrank(subscriber)
@@ -224,6 +204,28 @@ contract AutoMateSetup is Test, Deployers {
         id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
     }
 
+    /// @dev subscribe ERC20 Transfer task with specific user
+    function subscribeERC20TransferTaskBy(address subscriber, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            transferAmount,
+            abi.encodeCall(IERC20.transfer, (bob, transferAmount))
+        );
+
+        token0.approve(address(autoMate), transferAmount);
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    /// @dev subscribe Disperse Ether task with specific user
     function subscribeContractCallWithNativeTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
         public
         userPrank(subscriber)
@@ -255,6 +257,7 @@ contract AutoMateSetup is Test, Deployers {
         id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
     }
 
+    /// @dev subscribe Disperse token task with specific user
     function subscribeContractCallWithERC20TaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
         public
         userPrank(subscriber)
