@@ -95,7 +95,7 @@ contract AutoMateSetup is Test, Deployers {
         autoMate.setHookAddress(address(autoMateHook));
 
         // 6) Initialize a pool with these two tokens
-        (key, ) = initPool(
+        (key,) = initPool(
             currency0,
             currency1,
             autoMateHook, // Hook Contract
@@ -167,7 +167,11 @@ contract AutoMateSetup is Test, Deployers {
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
     /// @dev subscribe task with specific user
-    function subscribeTaskBy(address subscriber, uint256 transferAmount) public userPrank(subscriber) returns (uint256 id) {
+    function subscribeTaskBy(address subscriber, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
@@ -184,11 +188,11 @@ contract AutoMateSetup is Test, Deployers {
     }
 
     /// @dev get EIP712 signature for a receiver
-    function getEIP712Signature(
-        IAutoMate.ClaimBounty memory claimBounty,
-        uint256 privateKey,
-        bytes32 domainSeparator
-    ) public pure returns (bytes memory sig) {
+    function getEIP712Signature(IAutoMate.ClaimBounty memory claimBounty, uint256 privateKey, bytes32 domainSeparator)
+        public
+        pure
+        returns (bytes memory sig)
+    {
         (uint8 v, bytes32 r, bytes32 s) = _getEIP712SignatureRaw(claimBounty, privateKey, domainSeparator);
         return bytes.concat(r, s, bytes1(v));
     }
@@ -202,7 +206,11 @@ contract AutoMateSetup is Test, Deployers {
         }
     }
 
-    function calculateRemainingBountyByMin(uint256 minExecutedTooEarly) public view returns (uint256 remainingBounty, uint256 decayAmount) {
+    function calculateRemainingBountyByMin(uint256 minExecutedTooEarly)
+        public
+        view
+        returns (uint256 remainingBounty, uint256 decayAmount)
+    {
         remainingBounty = defaultBounty;
         decayAmount = (defaultBounty * minExecutedTooEarly * bountyDecayBPPerMinute) / _BASIS_POINTS;
         remainingBounty -= decayAmount;
