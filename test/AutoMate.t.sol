@@ -44,6 +44,52 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.executeTask("");
     }
 
+    function test_executeTask_SwapCanTriggerTaskExecutionAndDistributeJITBounty() public {
+        // Alice balance before subscription
+        assertEq(alice.balance, 110 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+
+        // Alice subscribes task with 1 ether JIT Bounty
+        // Transfer 1 ether + 0.01 ether (Protocol fee)
+        // Task: Transfer 1000 token0 to Bob after 1 minute
+        subscribeTaskBy(alice, 1000 ether);
+
+        // Alice balance after subscription
+        assertEq(alice.balance, 0);
+        assertEq(token0.balanceOf(alice), 9000 ether);
+
+        // Balances before someone swaps
+        assertEq(cat.balance, 1 ether);
+        assertEq(token0.balanceOf(bob), 0);
+        assertEq(token0.balanceOf(cat), 10000 ether);
+
+        // Searcher(cat) performs a swap and executes as at its `scheduledAt`, thus collected the full JIT Bounty
+        vm.warp(block.timestamp + 1 hours);
+        // swap 1 unit of token0 (Exact input) for token1
+        bool zeroForOne = true;
+        int256 amountSpecified = -1e18; // negative number indicates exact input swap!
+
+        IAutoMate.ClaimBounty memory claimBounty = IAutoMate.ClaimBounty({receiver: cat});
+        bytes memory sig = getEIP712Signature(claimBounty, userPrivateKeys[2], autoMate.DOMAIN_SEPARATOR());
+        bytes memory encodedHookData = abi.encode(claimBounty, sig);
+
+        approveNecessarySpenders(cat, 10000 ether);
+        vm.prank(cat);
+        BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
+        // ------------------- //
+
+        assertEq(int256(swapDelta.amount0()), amountSpecified);
+
+        // No JIT amount refunded to subscriber
+        assertEq(alice.balance, 0);
+        // Cat received 100 ether from the JIT bounty (no decay), 1 + 100 = 101 ether
+        assertEq(cat.balance, 101 ether);
+        // Bob received 1000 token0 from execution of scheduled task
+        assertEq(token0.balanceOf(bob), 1000 ether);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  ADMIN
     //////////////////////////////////////////////////////////////*/
