@@ -156,6 +156,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     {
         uint256 i = startingIdx != 0 ? startingIdx : 0;
         uint256 len = _tasks.length;
+        uint256 smallestGap;
         bool foundActive;
 
         for (i; i < len; i++) {
@@ -163,12 +164,11 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
             if (block.timestamp <= _tasks[i].scheduleAt) {
                 // find the starting index of active tasks
                 if (!foundActive) {
+                    smallestGap = _tasks[i].scheduleAt - block.timestamp;
                     activeStartingIdx = i;
                     foundActive = true;
                 }
-                // find the closest to JIT task index
-                uint256 smallestGap = _tasks[i].scheduleAt - block.timestamp;
-                // compare with the next active task
+                // compare with the next active task to find the closest to JIT task index
                 if (i + 1 < len && _tasks[i + 1].scheduleAt - block.timestamp < smallestGap) {
                     smallestGap = _tasks[i + 1].scheduleAt - block.timestamp;
                     cloestToJITIdx = i + 1;
