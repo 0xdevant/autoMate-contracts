@@ -31,7 +31,6 @@ contract TestAutoMate is AutoMateSetup {
                             TASKS RELATED
     //////////////////////////////////////////////////////////////*/
     function test_subscribeTask_CanSubscribeTask() public {
-        assertEq(alice.balance, 1.01 ether);
         taskId = subscribeTaskBy(alice, 1000 ether);
         assertEq(taskId, 0);
         assertEq(alice.balance, 0);
@@ -64,7 +63,7 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_setProtocolFeeBP_OwnerCanSetProtocolFeeBP() public {
-        assertEq(autoMate.getProtocolFeeBP(), 100);
+        assertEq(autoMate.getProtocolFeeBP(), defaultProtocolFeeBP);
         autoMate.setProtocolFeeBP(4000);
         assertEq(autoMate.getProtocolFeeBP(), 4000);
     }
@@ -92,7 +91,7 @@ contract TestAutoMate is AutoMateSetup {
         subscribeTaskBy(address(this), defaultTransferAmount);
 
         uint256 callAmount = defaultTransferAmount;
-        uint64 scheduleAt = uint64(block.timestamp + 60);
+        uint64 scheduleAt = defaultScheduleAt;
 
         tasks = autoMate.getTasks();
 
@@ -113,7 +112,7 @@ contract TestAutoMate is AutoMateSetup {
         subscribeTaskBy(address(this), defaultTransferAmount);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
         uint256 callAmount = defaultTransferAmount;
-        uint64 scheduleAt = uint64(block.timestamp + 60);
+        uint64 scheduleAt = defaultScheduleAt;
 
         assertEq(task.id, taskId);
         assertEq(task.subscriber, address(this));
@@ -130,6 +129,6 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_getProtocolFeeBP_CanGetProtocolFeeBP() public view {
-        assertEq(autoMate.getProtocolFeeBP(), 100);
+        assertEq(autoMate.getProtocolFeeBP(), defaultProtocolFeeBP);
     }
 }

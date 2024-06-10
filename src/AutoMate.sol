@@ -28,7 +28,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     address private _hookAddress;
     uint16 private _protocolFeeBP;
     /// @dev 1% decay on jitBounty per minute based on how close the execution time is to the scheduled time
-    uint16 private _bountyDecayBPPerMinute = 100; // 1%
+    uint16 private _bountyDecayBPPerMinute;
 
     modifier onlyFromHook() {
         if (msg.sender != _hookAddress) {
@@ -37,8 +37,12 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         _;
     }
 
-    constructor(uint16 protocolFeeBP) Ownable(msg.sender) AutoMateEIP712("AutoMate", "1") {
+    constructor(uint16 protocolFeeBP, uint16 bountyDecayBPPerMinute)
+        Ownable(msg.sender)
+        AutoMateEIP712("AutoMate", "1")
+    {
         _protocolFeeBP = protocolFeeBP;
+        _bountyDecayBPPerMinute = bountyDecayBPPerMinute;
     }
 
     function subscribeTask(bytes calldata taskInfo) external payable returns (uint256 taskId) {

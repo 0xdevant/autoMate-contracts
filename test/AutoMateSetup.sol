@@ -54,10 +54,11 @@ contract AutoMateSetup is Test, Deployers {
 
     // For AutoMate test cases
     uint256 taskId;
-    uint256 defaultBounty = 1 ether;
-    uint256 defaultTransferAmount = 1000 ether;
-    uint256 protocolFeeBP = 100;
-    uint256 protocolFee = (defaultBounty * protocolFeeBP) / _BASIS_POINTS;
+    uint64 defaultScheduleAt = uint64(block.timestamp + 1 hours);
+    uint256 defaultBounty = 100 ether;
+    uint256 defaultTransferAmount = 10000 ether;
+    uint256 defaultProtocolFeeBP = 1000;
+    uint256 protocolFee = (defaultBounty * defaultProtocolFeeBP) / _BASIS_POINTS;
     uint256 bountyDecayBPPerMinute = 100;
 
     // receive the bounty if any
@@ -82,8 +83,7 @@ contract AutoMateSetup is Test, Deployers {
         token1 = MockERC20(Currency.unwrap(currency1));
 
         // 3) Deploy our AutoMate contract
-        // 1% fee
-        autoMate = new AutoMate(100);
+        autoMate = new AutoMate(1000, 100); // 10% fee, 1% decay per min
 
         // 4) Deploy Hook contract to specified address
         address hookAddress = address(uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG));
@@ -154,7 +154,7 @@ contract AutoMateSetup is Test, Deployers {
         vm.label(cat, "cat");
 
         // ETH distribution
-        deal(alice, 1.01 ether);
+        deal(alice, 110 ether);
         deal(bob, 1 ether);
         deal(cat, 1 ether);
 
@@ -176,7 +176,7 @@ contract AutoMateSetup is Test, Deployers {
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
-            uint64(block.timestamp + 60),
+            uint64(block.timestamp + 1 hours),
             transferAmount,
             abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
