@@ -112,12 +112,13 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     function _setupForTask(TaskType taskType, address callingAddress, uint256 jitBounty, uint256 callAmount) internal {
         uint256 protocolFee = jitBounty * _protocolFeeBP / _BASIS_POINTS;
         uint256 minRequiredAmount = jitBounty + protocolFee;
-        if (msg.value != minRequiredAmount) revert InsufficientSetupFunds();
 
         // transfer the required funds to this contract
         if (taskType == TaskType.NATIVE_TRANSFER || taskType == TaskType.CONTRACT_CALL_WITH_NATIVE) {
-            if (msg.value != minRequiredAmount + callAmount) revert InsufficientTaskFunds();
+            minRequiredAmount += callAmount;
         }
+        if (msg.value != minRequiredAmount) revert InsufficientSetupFunds();
+
         if (taskType == TaskType.ERC20_TRANSFER || taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
             IERC20(callingAddress).safeTransferFrom(msg.sender, address(this), callAmount);
         }
