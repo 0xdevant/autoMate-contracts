@@ -166,7 +166,7 @@ contract AutoMateSetup is Test, Deployers {
     /*//////////////////////////////////////////////////////////////
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
-    /// @dev subscribe task with specific user
+    /// @dev subscribe task (ERC20 Transfer) with specific user
     function subscribeTaskBy(address subscriber, uint256 transferAmount)
         public
         userPrank(subscriber)
@@ -185,6 +185,26 @@ contract AutoMateSetup is Test, Deployers {
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), 0);
         id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function subscribeNativeTransferTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
+        protocolFee = (bounty * defaultProtocolFeeBP) / _BASIS_POINTS;
+        bytes memory taskInfo = abi.encode(
+            bounty,
+            IAutoMate.TaskType.NATIVE_TRANSFER,
+            address(token0),
+            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            transferAmount,
+            ZERO_BYTES
+        );
+
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
     }
 
     /// @dev get EIP712 signature for a receiver

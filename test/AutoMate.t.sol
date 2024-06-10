@@ -32,7 +32,7 @@ contract TestAutoMate is AutoMateSetup {
     /*//////////////////////////////////////////////////////////////
                             TASKS RELATED
     //////////////////////////////////////////////////////////////*/
-    function test_subscribeTask_RevertIfScheduleAtIs0() public {
+    function test_subscribeTask_RevertIfScheduleAtIs0() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
@@ -46,7 +46,7 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    function test_subscribeTask_RevertIfCallingAddressIs0() public {
+    function test_subscribeTask_RevertIfCallingAddressIs0() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
@@ -60,7 +60,7 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    function test_subscribeTask_RevertIfJITBountyIs0() public {
+    function test_subscribeTask_RevertIfJITBountyIs0() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             0, // JITBounty
             IAutoMate.TaskType.ERC20_TRANSFER,
@@ -74,7 +74,7 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    function test_subscribeTask_RevertIfCallAmountIs0() public {
+    function test_subscribeTask_RevertIfCallAmountIs0() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
@@ -87,14 +87,14 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    function test_subscribeTask_RevertIfCallDataIsEmpty() public {
+    function test_subscribeTask_RevertIfCallDataIsEmpty() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
             uint64(block.timestamp + 1 hours),
             1000,
-            "" // callData
+            ZERO_BYTES // callData
         );
         vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
         autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
@@ -117,7 +117,7 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: bounty}(taskInfo);
     }
 
-    function test_subscribeTask_CanSubscribeTask() public {
+    function test_subscribeTask_CanSubscribeERC20TransferTask() public {
         uint256 scheduledTransferAmount = 1000 ether;
 
         assertEq(alice.balance, 110 ether);
@@ -137,6 +137,19 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.scheduleAt, defaultScheduleAt); // 1 hour from now
         assertEq(task.callAmount, scheduledTransferAmount);
         assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, scheduledTransferAmount)));
+    }
+
+    function test_subscribeTask_CanSubscribeNativeTransferTask() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        assertEq(alice.balance, 110 ether);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount);
+        assertEq(taskId, 0);
+        // 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
     }
 
     function test_executeTask_RevertIfNotExecutedFromHook() public {
