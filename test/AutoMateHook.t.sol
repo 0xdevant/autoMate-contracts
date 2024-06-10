@@ -19,6 +19,29 @@ import {AutoMate} from "src/AutoMate.sol";
 import "src/interfaces/IAutoMate.sol";
 
 contract TestAutoMateHook is AutoMateSetup {
+    function test_swapWithoutExecuteTask() public {
+        // Subscribed task will not be executed
+        subscribeERC20TransferTaskBy(alice, defaultTransferAmount);
+
+        vm.warp(block.timestamp + 50 minutes);
+        bool zeroForOne = true;
+        int256 amountSpecified = -1e18; // negative number indicates exact input swap!
+
+        vm.startPrank(cat);
+        IERC20(address(token0)).approve(address(swapRouter), defaultTransferAmount);
+        swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        vm.stopPrank();
+
+        // No JIT amount refunded to subscriber
+        assertEq(alice.balance, 0);
+        // Cat didn't receive bounty, remaining its 1 ether balance
+        assertEq(cat.balance, 1 ether);
+        // Bob didn't receive 1000 token0 from scheduled task
+        assertEq(token0.balanceOf(bob), 0);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
     function test_swapAndExecuteTask_Demo() public {
         uint256 beforeSubETHBalanceAlice = alice.balance;
         uint256 beforeSubTokenBalanceAlice = token0.balanceOf(alice);
