@@ -37,7 +37,7 @@ contract AutoMateSetup is Test, Deployers {
     PoolId public poolId;
 
     uint256 private constant _BASIS_POINTS = 10000;
-    bytes32 private constant _SWAPPER_TYPEHASH = keccak256("Swapper(address executor)");
+    bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
 
     // Native tokens are represented by address(0)
     Currency ethCurrency = Currency.wrap(address(0));
@@ -55,6 +55,10 @@ contract AutoMateSetup is Test, Deployers {
     // For AutoMate test cases
     uint256 taskId;
     uint256 defaultBounty = 1 ether;
+    uint256 defaultTransferAmount = 1000 ether;
+    uint256 protocolFeeBP = 100;
+    uint256 protocolFee = defaultBounty * protocolFeeBP / _BASIS_POINTS;
+    uint256 bountyDecayBPPerMinute = 100;
 
     // receive the bounty if any
     fallback() external payable {}
@@ -91,7 +95,7 @@ contract AutoMateSetup is Test, Deployers {
         autoMate.setHookAddress(address(autoMateHook));
 
         // 6) Initialize a pool with these two tokens
-        (key, ) = initPool(
+        (key,) = initPool(
             currency0,
             currency1,
             autoMateHook, // Hook Contract
@@ -163,16 +167,19 @@ contract AutoMateSetup is Test, Deployers {
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
     /// @dev subscribe task with specific user
-    function subscribeTaskBy(address subscriber, uint256 transferAmount) public userPrank(subscriber) returns (uint256 id) {
+    function subscribeTaskBy(address subscriber, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
             uint64(block.timestamp + 60),
             transferAmount,
-            abi.encodeCall(IERC20.transfer, (bob, 1 ether))
+            abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount))
         );
-        uint256 protocolFee = (defaultBounty * autoMate.getProtocolFeeBP()) / _BASIS_POINTS;
 
         IERC20(address(token0)).approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
@@ -180,29 +187,39 @@ contract AutoMateSetup is Test, Deployers {
         id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
-    /// @dev get permit signature for a swapper
-    function getPermitSignature(
-        IAutoMate.Swapper memory swapper,
-        uint256 privateKey,
-        bytes32 domainSeparator
-    ) public pure returns (bytes memory sig) {
-        (uint8 v, bytes32 r, bytes32 s) = _getPermitSignatureRaw(swapper, privateKey, domainSeparator);
+    /// @dev get EIP712 signature for a receiver
+    function getEIP712Signature(IAutoMate.ClaimBounty memory claimBounty, uint256 privateKey, bytes32 domainSeparator)
+        public
+        pure
+        returns (bytes memory sig)
+    {
+        (uint8 v, bytes32 r, bytes32 s) = _getEIP712SignatureRaw(claimBounty, privateKey, domainSeparator);
         return bytes.concat(r, s, bytes1(v));
     }
 
-    function _getPermitSignatureRaw(
-        IAutoMate.Swapper memory swapper,
+    function calculateRemainingBountyByMin(uint256 minExecutedTooEarly)
+        public
+        view
+        returns (uint256 remainingBounty, uint256 decayAmount)
+    {
+        remainingBounty = defaultBounty;
+        decayAmount = defaultBounty * minExecutedTooEarly * bountyDecayBPPerMinute / _BASIS_POINTS;
+        remainingBounty -= decayAmount;
+    }
+
+    function _getEIP712SignatureRaw(
+        IAutoMate.ClaimBounty memory claimBounty,
         uint256 privateKey,
         bytes32 domainSeparator
     ) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 msgHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, _hash(swapper)));
+        bytes32 msgHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, _hash(claimBounty)));
 
         (v, r, s) = vm.sign(privateKey, msgHash);
     }
 
     // computes the hash of a permit
-    function _hash(IAutoMate.Swapper memory swapper) internal pure returns (bytes32) {
-        return keccak256(abi.encode(_SWAPPER_TYPEHASH, swapper.executor));
+    function _hash(IAutoMate.ClaimBounty memory claimBounty) internal pure returns (bytes32) {
+        return keccak256(abi.encode(_CLAIM_BOUNTY_TYPEHASH, claimBounty.receiver));
     }
 
     function _normalize(uint256 amount) internal pure returns (uint256) {

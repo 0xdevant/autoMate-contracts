@@ -29,9 +29,9 @@ interface IAutoMate {
         bytes callData;
     }
 
-    // EIP712 compatible struct to verify the swapper
-    struct Swapper {
-        address executor;
+    // used to verify the receiver of the bounty via EIP712 compatible signature
+    struct ClaimBounty {
+        address receiver;
     }
 
     event TaskSubscribed(address indexed subscriber, uint256 taskId);
@@ -45,7 +45,7 @@ interface IAutoMate {
     error InvalidTaskInput();
     error InvalidProtocolFeeBP();
     error InvalidBountyDecayBPPerMinute();
-    error InvalidSwapperFromHookData();
+    error InvalidReceiverFromHookData();
     error AllTasksExpired();
     error TaskNotExpiredYet();
 

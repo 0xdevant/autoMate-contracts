@@ -15,7 +15,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
 
-    bytes32 private constant _SWAPPER_TYPEHASH = keccak256("Swapper(address executor)");
+    bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
     uint256 private constant _BASIS_POINTS = 10000;
     // uint256 private constant _MIN_ERC20_BOUNTY = 1e18;
 
@@ -64,8 +64,8 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
 
     /// @dev execute task based on the index found on task that can be executed closest to its scheduleAt(JIT)
     function executeTask(bytes calldata hookData) external payable onlyFromHook {
-        // verify the swapper is indeed the executor address via signature passed through hook data
-        (Swapper memory swapper, bytes memory sig) = abi.decode(hookData, (Swapper, bytes));
+        // verify the receiver is indeed owned by the executor address via signature passed through hook data
+        (ClaimBounty memory claimBounty, bytes memory sig) = abi.decode(hookData, (ClaimBounty, bytes));
 
         (uint256 closestToJITIdx, uint256 activeStartingIdx) = _tryGetClosestToJITIdx(_activeTaskStartingIdx);
         Task memory task = _tasks[closestToJITIdx];
@@ -77,9 +77,9 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
 
         // task still accessible after pop
         _executeTaskBasedOnTaskType(task);
-        _distributeBountyBasedOnExecutionTime(task, swapper, sig);
+        _distributeBountyBasedOnExecutionTime(task, claimBounty, sig);
 
-        emit TaskExecuted(swapper.executor, task.id);
+        emit TaskExecuted(claimBounty.receiver, task.id);
     }
 
     function redeemFromExpiredTask(uint256 taskIdx) external {
@@ -168,7 +168,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         }
     }
 
-    function _distributeBountyBasedOnExecutionTime(Task memory task, Swapper memory swapper, bytes memory sig)
+    function _distributeBountyBasedOnExecutionTime(Task memory task, ClaimBounty memory claimBounty, bytes memory sig)
         internal
     {
         // block.timestamp must be <= task.scheduleAt at this point
@@ -176,11 +176,11 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         uint256 finalBounty =
             task.jitBounty - (task.jitBounty * minsBeforeJIT * _bountyDecayBPPerMinute / _BASIS_POINTS);
 
-        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(_SWAPPER_TYPEHASH, swapper.executor)));
-        if (digest.recover(sig) != swapper.executor) revert InvalidSwapperFromHookData();
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(_CLAIM_BOUNTY_TYPEHASH, claimBounty.receiver)));
+        if (digest.recover(sig) != claimBounty.receiver) revert InvalidReceiverFromHookData();
 
-        // transfer bounty to executor
-        payable(swapper.executor).transfer(finalBounty);
+        // transfer bounty to receiver
+        payable(claimBounty.receiver).transfer(finalBounty);
         // transfer remaining bounty back to subscriber
         if (task.jitBounty > finalBounty) payable(task.subscriber).transfer(task.jitBounty - finalBounty);
     }
