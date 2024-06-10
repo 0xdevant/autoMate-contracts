@@ -204,7 +204,7 @@ contract AutoMateSetup is Test, Deployers {
             IAutoMate.TaskType.NATIVE_TRANSFER,
             address(0),
             receiver,
-            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            defaultScheduleAt, // Scheduled at 1 hour from now
             transferAmount,
             ZERO_BYTES
         );
@@ -217,17 +217,18 @@ contract AutoMateSetup is Test, Deployers {
     }
 
     /// @dev subscribe ERC20 Transfer task with specific user
-    function subscribeERC20TransferTaskBy(address subscriber, uint256 transferAmount)
+    function subscribeERC20TransferTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
         public
         userPrank(subscriber)
         returns (uint256 id)
     {
+        protocolFee = (bounty * defaultProtocolFeeBP) / _BASIS_POINTS;
         bytes memory taskInfo = abi.encode(
-            defaultBounty,
+            bounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
             address(token0),
-            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            defaultScheduleAt, // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
@@ -237,7 +238,7 @@ contract AutoMateSetup is Test, Deployers {
         token0.approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), expectedTaskId);
-        id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+        id = autoMate.subscribeTask{value: bounty + protocolFee}(taskInfo);
     }
 
     /// @dev subscribe Disperse Ether task with specific user
@@ -263,7 +264,7 @@ contract AutoMateSetup is Test, Deployers {
             IAutoMate.TaskType.CONTRACT_CALL_WITH_NATIVE,
             address(0),
             address(disperse),
-            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            defaultScheduleAt, // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(Disperse.disperseEther, (recipients, values))
         );
@@ -298,7 +299,7 @@ contract AutoMateSetup is Test, Deployers {
             IAutoMate.TaskType.CONTRACT_CALL_WITH_ERC20,
             address(token0),
             address(disperse),
-            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            defaultScheduleAt, // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(Disperse.disperseToken, (address(token0), recipients, values))
         );

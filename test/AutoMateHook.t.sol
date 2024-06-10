@@ -17,7 +17,7 @@ import "src/interfaces/IAutoMate.sol";
 contract TestAutoMateHook is AutoMateSetup {
     function test_swapWithoutExecuteTask_WithEmptyHookData() public {
         // Subscribed task will not be executed
-        subscribeERC20TransferTaskBy(alice, defaultTransferAmount);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, defaultTransferAmount);
 
         vm.warp(block.timestamp + 50 minutes);
         bool zeroForOne = true;
@@ -56,7 +56,7 @@ contract TestAutoMateHook is AutoMateSetup {
         console2.log("eth balanceOf(alice):", _normalize(beforeSubETHBalanceAlice));
         console2.log("token 0 balanceOf(alice):", _normalize(beforeSubTokenBalanceAlice));
 
-        subscribeERC20TransferTaskBy(alice, defaultTransferAmount);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, defaultTransferAmount);
 
         uint256 afterSubETHBalanceAlice = alice.balance;
         uint256 afterSubTokenBalanceAlice = token0.balanceOf(alice);

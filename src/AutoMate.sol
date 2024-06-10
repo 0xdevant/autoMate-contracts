@@ -168,7 +168,6 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
                 }
                 // find the closest to JIT task index
                 uint256 smallestGap = _tasks[i].scheduleAt - block.timestamp;
-                cloestToJITIdx = i;
                 // compare with the next active task
                 if (i + 1 < len && _tasks[i + 1].scheduleAt - block.timestamp < smallestGap) {
                     smallestGap = _tasks[i + 1].scheduleAt - block.timestamp;

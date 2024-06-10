@@ -151,7 +151,7 @@ contract TestAutoMate is AutoMateSetup {
         // Default bounty = 100 ether
         // Protocol fee = 10 ether (10%)
         // Task: Transfer 1000 token0 to Bob, schedule at 1 hour later
-        taskId = subscribeERC20TransferTaskBy(alice, scheduledTransferAmount);
+        taskId = subscribeERC20TransferTaskBy(alice, defaultBounty, scheduledTransferAmount);
         assertEq(taskId, 0);
 
         // Transferred 100 eth (Bounty) + 10 eth (Protocol fee) => 0 eth remaining
@@ -242,13 +242,13 @@ contract TestAutoMate is AutoMateSetup {
                             TASK EXECUTION
     //////////////////////////////////////////////////////////////*/
     function test_executeTask_RevertIfNotExecutedFromHook() public {
-        taskId = subscribeERC20TransferTaskBy(address(this), 1000 ether);
+        taskId = subscribeERC20TransferTaskBy(address(this), defaultBounty, 1000 ether);
         vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
         autoMate.executeTask("");
     }
 
     function test_executeTask_RevertIfInvalidReceiverSignature() public {
-        taskId = subscribeERC20TransferTaskBy(address(alice), 1000 ether);
+        taskId = subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
 
         // Swap details
         vm.warp(block.timestamp + 1 hours);
@@ -275,7 +275,7 @@ contract TestAutoMate is AutoMateSetup {
 
         // Alice subscribes task with 100 ether JIT Bounty
         // Task: Transfer 1000 token0 to Bob, schedule at 1 hour later
-        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
 
         // Alice balance after subscription
         // Transfered 100 eth (Bounty) + 10 eth (Protocol fee) + 1000 ether of Token0
@@ -323,7 +323,7 @@ contract TestAutoMate is AutoMateSetup {
         // Alice subscribes task with 100 ether JIT Bounty
         // Transfer 100 ether + 10 ether (Protocol fee)
         // Task: Transfer 1000 token0 to Bob after 1 hour
-        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
 
         // Searcher(cat) performs a swap and executes task 10 minutes earlier than `scheduleAt`, thus got 10% decay on JIT Bounty
         // swap 1 unit of token0 (Exact input) for token1
@@ -413,6 +413,49 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(derek.balance, 30 ether);
     }
 
+    function test_executeTask_CanExecuteTaskWithClosestJITIdx() public {
+        // Task0: transfer 1000 token0 to Bob, scheduleAt = 1 hour
+        uint256 bounty = 10 ether; // 11 eth
+        uint256 taskId = subscribeERC20TransferTaskBy(alice, bounty, 1000 ether);
+
+        assertEq(taskId, 0);
+        IAutoMate.Task memory task = autoMate.getTask(taskId);
+        assertEq(task.scheduleAt, block.timestamp + 1 hours); // 1 hour later
+
+        // Task1: transfer 600 token0 to bob, scheduleAt = 15 mins
+        bounty = 20 ether; // 22 eth
+        defaultScheduleAt = uint64(block.timestamp + 15 minutes);
+        taskId = subscribeERC20TransferTaskBy(alice, bounty, 600 ether);
+
+        assertEq(taskId, 1);
+        task = autoMate.getTask(taskId);
+        assertEq(task.scheduleAt, block.timestamp + 15 minutes);
+
+        // Task2: transfer 300 token0 to bob, scheduleAt = 30 mins
+        bounty = 30 ether; // 33 eth
+        defaultScheduleAt = uint64(block.timestamp + 30 minutes);
+        taskId = subscribeERC20TransferTaskBy(alice, bounty, 300 ether);
+
+        assertEq(taskId, 2);
+        task = autoMate.getTask(taskId);
+        assertEq(task.scheduleAt, block.timestamp + 30 minutes);
+
+        assertEq(alice.balance, 44 ether); // 110 - 11 - 22 - 33
+
+        // swap 1 unit of token0 (Exact input) for token1
+        // Task1 should be executed as it got the closest JIT Idx => 5% decay (15 - 10)
+        swapToken(cat, block.timestamp + 10 minutes, true, -1e18);
+
+        // 5% of 20 JIT, i.e. 1 eth, refunded to subscriber
+        assertEq(alice.balance, 45 ether);
+        // Bob's token balance of 0 + received 600 from task1
+        assertEq(token0.balanceOf(bob), 600 ether);
+        // Cat's eth balance of 1 + 19 from bounty
+        assertEq(cat.balance, 20 ether);
+        // Cat's token0 balance 10000 - 1 from swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             REDEEM EXPIRED TASK
     //////////////////////////////////////////////////////////////*/
@@ -422,13 +465,13 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_redeemFromExpiredTask_RevertIfTaskHasntExpired() public {
-        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
         vm.expectRevert(IAutoMate.TaskNotExpiredYet.selector);
         autoMate.redeemFromExpiredTask(0);
     }
 
     function test_redeemFromExpiredTask_RevertIfNotRedeemedBySubscriber() public {
-        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(bob);
         vm.expectRevert(IAutoMate.OnlyFromTaskSubscriber.selector);
@@ -462,7 +505,7 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(alice.balance, 110 ether);
         assertEq(token0.balanceOf(alice), 10000 ether);
         // Default bounty = 100 ether
-        subscribeERC20TransferTaskBy(alice, 1000 ether);
+        subscribeERC20TransferTaskBy(alice, defaultBounty, 1000 ether);
         assertEq(alice.balance, 0); // 110 - 100 bounty - 10 protocol fee = 0
         assertEq(token0.balanceOf(alice), 9000 ether); // 10000 - 1000 for task
 
@@ -577,19 +620,19 @@ contract TestAutoMate is AutoMateSetup {
     //////////////////////////////////////////////////////////////*/
     function test_hasPendingTask_ReturnTrueIfThereIsPendingTask() public {
         assertFalse(autoMate.hasPendingTask());
-        subscribeERC20TransferTaskBy(address(this), 1000 ether);
+        subscribeERC20TransferTaskBy(address(this), defaultBounty, 1000 ether);
         assertTrue(autoMate.hasPendingTask());
     }
 
     function test_hasActiveTask_ReturnTrueIfThereIsActiveTask() public {
         assertFalse(autoMate.hasActiveTask());
-        subscribeERC20TransferTaskBy(address(this), 1000 ether);
+        subscribeERC20TransferTaskBy(address(this), defaultBounty, 1000 ether);
         assertTrue(autoMate.hasActiveTask());
     }
 
     function test_getNumOfTasks_CanGetNumOfTasks() public {
         assertEq(autoMate.getNumOfTasks(), 0);
-        subscribeERC20TransferTaskBy(address(this), 1000 ether);
+        subscribeERC20TransferTaskBy(address(this), defaultBounty, 1000 ether);
         assertEq(autoMate.getNumOfTasks(), 1);
     }
 
@@ -598,7 +641,7 @@ contract TestAutoMate is AutoMateSetup {
 
         // No tasks before subscribing
         assertEq(tasks.length, 0);
-        subscribeERC20TransferTaskBy(address(this), defaultTransferAmount);
+        subscribeERC20TransferTaskBy(address(this), defaultBounty, defaultTransferAmount);
 
         tasks = autoMate.getTasks();
 
@@ -616,7 +659,7 @@ contract TestAutoMate is AutoMateSetup {
     }
 
     function test_getTask_CanGetTaskDetails() public {
-        subscribeERC20TransferTaskBy(address(this), defaultTransferAmount);
+        subscribeERC20TransferTaskBy(address(this), defaultBounty, defaultTransferAmount);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
 
         assertEq(task.id, taskId);
