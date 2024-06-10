@@ -49,18 +49,20 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         (
             uint256 jitBounty,
             TaskType taskType,
+            address tokenAddress,
             address callingAddress,
             uint64 scheduleAt,
             uint256 callAmount,
             bytes memory callData
-        ) = abi.decode(taskInfo, (uint256, TaskType, address, uint64, uint256, bytes));
+        ) = abi.decode(taskInfo, (uint256, TaskType, address, address, uint64, uint256, bytes));
 
-        _sanityCheck(scheduleAt, callingAddress, jitBounty, callAmount, taskType, callData);
-        _setupForTask(taskType, callingAddress, jitBounty, callAmount);
+        _sanityCheck(scheduleAt, tokenAddress, callingAddress, jitBounty, callAmount, taskType, callData);
+        _setupForTask(taskType, tokenAddress, jitBounty, callAmount);
 
         taskId = _taskIdCounter++; // starts at 0
-        Task memory task =
-            Task(taskId, msg.sender, jitBounty, taskType, callingAddress, scheduleAt, callAmount, callData);
+        Task memory task = Task(
+            taskId, msg.sender, jitBounty, taskType, tokenAddress, callingAddress, scheduleAt, callAmount, callData
+        );
         _tasks.push(task);
 
         emit TaskSubscribed(msg.sender, taskId);
@@ -105,6 +107,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     //////////////////////////////////////////////////////////////*/
     function _sanityCheck(
         uint64 scheduleAt,
+        address tokenAddress,
         address callingAddress,
         uint256 jitBounty,
         uint256 callAmount,
@@ -112,7 +115,11 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         bytes memory callData
     ) internal pure {
         if (
-            scheduleAt == 0 || callingAddress == address(0) || jitBounty == 0 || callAmount == 0
+            scheduleAt == 0
+                || (
+                    (taskType != TaskType.NATIVE_TRANSFER && taskType != TaskType.CONTRACT_CALL_WITH_NATIVE)
+                        && tokenAddress == address(0)
+                ) || callingAddress == address(0) || jitBounty == 0 || callAmount == 0
                 || (taskType != TaskType.NATIVE_TRANSFER && callData.length == 0)
         ) {
             revert InvalidTaskInput();
@@ -120,7 +127,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     }
 
     /// @dev setup all the prerequisites in order for the scheduled task to execute successfully
-    function _setupForTask(TaskType taskType, address callingAddress, uint256 jitBounty, uint256 callAmount) internal {
+    function _setupForTask(TaskType taskType, address tokenAddress, uint256 jitBounty, uint256 callAmount) internal {
         uint256 protocolFee = jitBounty * _protocolFeeBP / _BASIS_POINTS;
         uint256 minRequiredAmount = jitBounty + protocolFee;
 
@@ -131,7 +138,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         if (msg.value != minRequiredAmount) revert InsufficientSetupFunds();
 
         if (taskType == TaskType.ERC20_TRANSFER || taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
-            IERC20(callingAddress).safeTransferFrom(msg.sender, address(this), callAmount);
+            IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), callAmount);
         }
     }
 
@@ -175,6 +182,10 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
             if (!success) revert TaskFailed(data);
         }
         if (task.taskType == TaskType.ERC20_TRANSFER || task.taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
+            // Approve before allowing the callingAddress to handle the tokens
+            if (task.taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
+                IERC20(task.tokenAddress).approve(task.callingAddress, task.callAmount);
+            }
             (bool success, bytes memory data) = task.callingAddress.call(task.callData);
             if (!success) revert TaskFailed(data);
         }

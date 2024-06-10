@@ -31,14 +31,30 @@ contract TestAutoMate is AutoMateSetup {
     using PoolIdLibrary for PoolKey;
 
     /*//////////////////////////////////////////////////////////////
-                            TASKS RELATED
+                            TASK SUBSCRIPTION
     //////////////////////////////////////////////////////////////*/
     function test_subscribeTask_RevertIfScheduleAtIs0() public userPrank(alice) {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
+            address(token0),
             0, // scheduleAt
+            1000 ether,
+            abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
+        );
+        IERC20(address(token0)).approve(address(autoMate), 1000 ether);
+        vm.expectRevert(IAutoMate.InvalidTaskInput.selector);
+        autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
+    }
+
+    function test_subscribeTask_RevertIfTokenAddressIs0() public userPrank(alice) {
+        bytes memory taskInfo = abi.encode(
+            defaultBounty,
+            IAutoMate.TaskType.ERC20_TRANSFER,
+            address(0), // tokenAddress can only be 0 when taskType is NATIVE_TRANSFER or CONTRACT_CALL_WITH_NATIVE
+            address(token0),
+            uint64(block.timestamp + 1 hours),
             1000 ether,
             abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
         );
@@ -51,6 +67,7 @@ contract TestAutoMate is AutoMateSetup {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
             address(0), // callingAddress
             uint64(block.timestamp + 1 hours),
             1000 ether,
@@ -66,6 +83,7 @@ contract TestAutoMate is AutoMateSetup {
             0, // JITBounty
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
+            address(token0),
             uint64(block.timestamp + 1 hours),
             1000 ether,
             abi.encodeCall(IERC20.transfer, (bob, 1000 ether))
@@ -80,6 +98,7 @@ contract TestAutoMate is AutoMateSetup {
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
+            address(token0),
             uint64(block.timestamp + 1 hours),
             0, // callAmount
             abi.encodeCall(IERC20.transfer, (bob, 0))
@@ -92,6 +111,7 @@ contract TestAutoMate is AutoMateSetup {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
             address(token0),
             uint64(block.timestamp + 1 hours),
             1000,
@@ -108,6 +128,7 @@ contract TestAutoMate is AutoMateSetup {
         bytes memory taskInfo = abi.encode(
             bounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
             address(token0),
             uint64(block.timestamp + 1 hours),
             1000,
@@ -181,6 +202,9 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(alice), 9940 ether);
     }
 
+    /*//////////////////////////////////////////////////////////////
+                            TASK EXECUTION
+    //////////////////////////////////////////////////////////////*/
     function test_executeTask_RevertIfNotExecutedFromHook() public {
         taskId = subscribeERC20TransferTaskBy(address(this), 1000 ether);
         vm.expectRevert(IAutoMate.OnlyFromAuthorizedHook.selector);
@@ -287,7 +311,7 @@ contract TestAutoMate is AutoMateSetup {
         uint256 scheduledTransferAmount = 20 ether;
         subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
 
-        // Assume taking all the bounty for simplicity
+        // Assume swap at `scheduleAt` => taking full JIT bounty for simplicity
         // swap 1 unit of token0 (Exact input) for token1
         swapToken(cat, block.timestamp + 1 hours, true, -1e18);
 
@@ -299,6 +323,58 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(cat.balance, 11 ether);
         // Cat's token0 balance reduced by 1 after swap
         assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
+    function test_executeTask_SwapCanTriggerContractCallWithERC20Task() public {
+        // Alice subscribes task with 10 ether JIT Bounty
+        uint256 bounty = 10 ether;
+        // Task: Transfer 10, 20, 30 units of token0 to Bob, Cat and Derek respectively after 1 hour
+        // Transfer 10 eth + 1 eth (Protocol fee) + 60 units of token0
+        uint256 scheduledTransferAmount = 60 ether;
+        subscribeContractCallWithERC20TaskBy(alice, bounty, scheduledTransferAmount);
+
+        // Assume swap at `scheduleAt` => taking full JIT bounty for simplicity
+        // swap 1 unit of token0 (Exact input) for token1
+        swapToken(cat, block.timestamp + 1 hours, true, -1e18);
+
+        // 0 JIT refunded to subscriber, 110 - 11 = 99 eth
+        assertEq(alice.balance, 99 ether);
+        // no change on bob's eth balance
+        assertEq(bob.balance, 1 ether);
+        // Bob received 10 token0 from task
+        assertEq(token0.balanceOf(bob), 10 ether);
+        // Cat's eth balance + 10 from bounty
+        assertEq(cat.balance, 11 ether);
+        // Cat's token0 balance 10000 + 20 from task - 1 from swap = 10019
+        assertEq(token0.balanceOf(cat), 10019 ether);
+        // Derek received 30 units of token0 from task
+        assertEq(token0.balanceOf(derek), 30 ether);
+    }
+
+    function test_executeTask_SwapCanTriggerContractCallWithNativeTask() public {
+        // Alice subscribes task with 10 ether JIT Bounty
+        uint256 bounty = 10 ether;
+        // Task: Transfer 10, 20, 30 eth to Bob, Cat and Derek respectively after 1 hour
+        // Transfer 10 eth + 1 eth (Protocol fee) + 60 eth
+        uint256 scheduledTransferAmount = 60 ether;
+        subscribeContractCallWithNativeTaskBy(alice, bounty, scheduledTransferAmount);
+
+        // Assume swap at `scheduleAt` => taking full JIT bounty for simplicity
+        // swap 1 unit of token0 (Exact input) for token1
+        swapToken(cat, block.timestamp + 1 hours, true, -1e18);
+
+        // 0 JIT refunded to subscriber, 110 - 11 - 60 = 39 eth
+        assertEq(alice.balance, 39 ether);
+        // Bob's eth balance of 1 + received 10 from task
+        assertEq(bob.balance, 11 ether);
+        // No change on token0's balance
+        assertEq(token0.balanceOf(bob), 0);
+        // Cat's eth balance of 1 + 10 from bounty + 20 from task = 31
+        assertEq(cat.balance, 31 ether);
+        // Cat's token0 balance 10000 - 1 from swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+        // Derek received 30 eth from task
+        assertEq(derek.balance, 30 ether);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -405,35 +481,5 @@ contract TestAutoMate is AutoMateSetup {
 
     function test_getProtocolFeeBP_CanGetProtocolFeeBP() public view {
         assertEq(autoMate.getProtocolFeeBP(), defaultProtocolFeeBP);
-    }
-
-    function test_subscribeTask_ForReference() public userPrank(alice) {
-        address[] memory recipients = new address[](3);
-        recipients[0] = bob;
-        recipients[1] = cat;
-        recipients[2] = derek;
-
-        uint256[] memory values = new uint256[](3);
-        values[0] = 10 ether;
-        values[1] = 20 ether;
-        values[2] = 30 ether;
-
-        disperse.disperseEther{value: 60 ether}(recipients, values);
-        // bytes memory callData = abi.encodeCall(Disperse.disperseEther, (recipients, values));
-        // (bool sucess,) = address(disperse).call{value: 60 ether}(callData);
-        assertEq(alice.balance, 50 ether);
-        assertEq(bob.balance, 11 ether);
-        assertEq(cat.balance, 21 ether);
-        assertEq(derek.balance, 30 ether);
-
-        token0.approve(address(disperse), 100 ether);
-        disperse.disperseToken(address(token0), recipients, values);
-        // bytes memory callData = abi.encodeCall(Disperse.disperseToken, (address(token0), recipients, values));
-        // (bool sucess,) = address(disperse).call(callData);
-        // assertTrue(sucess);
-        assertEq(token0.balanceOf(alice), 9940 ether);
-        assertEq(token0.balanceOf(bob), 10 ether);
-        assertEq(token0.balanceOf(cat), 10020 ether);
-        assertEq(token0.balanceOf(derek), 30 ether);
     }
 }

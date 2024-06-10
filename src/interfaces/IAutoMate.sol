@@ -23,6 +23,7 @@ interface IAutoMate {
         address subscriber;
         uint256 jitBounty;
         TaskType taskType;
+        address tokenAddress;
         address callingAddress;
         uint64 scheduleAt;
         uint256 callAmount;

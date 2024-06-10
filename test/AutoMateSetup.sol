@@ -201,6 +201,7 @@ contract AutoMateSetup is Test, Deployers {
         bytes memory taskInfo = abi.encode(
             bounty,
             IAutoMate.TaskType.NATIVE_TRANSFER,
+            address(0),
             receiver,
             uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
@@ -221,6 +222,7 @@ contract AutoMateSetup is Test, Deployers {
         bytes memory taskInfo = abi.encode(
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
+            address(token0),
             address(token0),
             uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
@@ -254,7 +256,8 @@ contract AutoMateSetup is Test, Deployers {
         bytes memory taskInfo = abi.encode(
             bounty,
             IAutoMate.TaskType.CONTRACT_CALL_WITH_NATIVE,
-            address(token0),
+            address(0),
+            address(disperse),
             uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(Disperse.disperseEther, (recipients, values))
@@ -287,6 +290,7 @@ contract AutoMateSetup is Test, Deployers {
             bounty,
             IAutoMate.TaskType.CONTRACT_CALL_WITH_ERC20,
             address(token0),
+            address(disperse),
             uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(Disperse.disperseToken, (address(token0), recipients, values))
