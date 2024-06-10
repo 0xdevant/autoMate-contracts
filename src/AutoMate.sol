@@ -202,8 +202,9 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     {
         // block.timestamp must be <= task.scheduleAt at this point
         uint256 minsBeforeJIT = (task.scheduleAt - block.timestamp) / 1 minutes;
-        uint256 finalBounty =
-            task.jitBounty - (task.jitBounty * minsBeforeJIT * _bountyDecayBPPerMinute / _BASIS_POINTS);
+        uint256 finalBounty = minsBeforeJIT >= 100
+            ? 0
+            : task.jitBounty - (task.jitBounty * minsBeforeJIT * _bountyDecayBPPerMinute / _BASIS_POINTS);
 
         bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(_CLAIM_BOUNTY_TYPEHASH, claimBounty.receiver)));
         if (digest.recover(sig) != claimBounty.receiver) revert InvalidReceiverFromHookData();

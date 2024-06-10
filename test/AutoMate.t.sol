@@ -481,6 +481,32 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(cat), 9999 ether);
     }
 
+    function test_executeTask_TaskExecutedWithFullDecayWontGetBounty() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        // Before subscription
+        assertEq(alice.balance, 110 ether);
+        defaultScheduleAt = uint64(block.timestamp + 2 hours);
+        subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+        // After subscription = 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
+
+        // Execute 120 mins before scheduleAt, 1% decay / min, thus 100% decay
+        swapToken(cat, block.timestamp, true, -1e18);
+
+        // Task executed with 100% decay, return full bounty to subscriber
+        assertEq(alice.balance, 89 ether);
+        // Bob received 20 eth
+        assertEq(bob.balance, 21 ether);
+        // Cat didn't receive bounty, remain at 1 eth balance
+        assertEq(cat.balance, 1 ether);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             REDEEM EXPIRED TASK
     //////////////////////////////////////////////////////////////*/
