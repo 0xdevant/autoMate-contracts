@@ -14,7 +14,7 @@ order to claim the maximum amount of bounty.
 
 AutoMate mainly consists of two contracts:
 
-`AutoMate.sol` - The Hub that handles all the subscriptions and executions of on-chain tasks.
+`AutoMate.sol` - The Hub that handles all the subscriptions and executions of on-chain tasks. It also calculates the proper amount of bounty to distribute based on how promptly the searcher executes the task.
 
 `AutoMateHook.sol` - The Uniswap v4 Hook that triggers the task execution during every swap.
 
