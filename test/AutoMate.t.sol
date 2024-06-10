@@ -125,7 +125,7 @@ contract TestAutoMate is AutoMateSetup {
         uint256 scheduledTransferAmount = 20 ether;
 
         assertEq(alice.balance, 110 ether);
-        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
         assertEq(taskId, 0);
         // 110 - 10 - 1 - 20
         assertEq(alice.balance, 79 ether);
@@ -261,8 +261,8 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(alice), 10000 ether);
 
         // Alice subscribes task with 100 ether JIT Bounty
-        // Transfer 1 ether + 0.01 ether (Protocol fee)
-        // Task: Transfer 1000 token0 to Bob after 1 minute
+        // Transfer 100 ether + 10 ether (Protocol fee)
+        // Task: Transfer 1000 token0 to Bob after 1 hour
         subscribeERC20TransferTaskBy(alice, 1000 ether);
 
         // Searcher(cat) performs a swap and executes task 10 minutes earlier than `scheduleAt`, thus got 10% decay on JIT Bounty
@@ -275,6 +275,28 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(cat.balance, 91 ether);
         // Bob received 1000 token0 from execution of scheduled task
         assertEq(token0.balanceOf(bob), 1000 ether);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
+    function test_executeTask_SwapCanTriggerNativeTransferTask() public {
+        // Alice subscribes task with 10 ether JIT Bounty
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 eth to Bob after 1 hour
+        // Transfer 10 eth + 1 eth (Protocol fee) + 20 eth = 31 eth
+        uint256 scheduledTransferAmount = 20 ether;
+        subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+
+        // Assume taking all the bounty for simplicity
+        // swap 1 unit of token0 (Exact input) for token1
+        swapToken(cat, block.timestamp + 1 hours, true, -1e18);
+
+        // 0 JIT refunded to subscriber, 110 - 31 = 79 eth
+        assertEq(alice.balance, 79 ether);
+        // Bob received 20 eth from execution of scheduled task, 1 + 20 = 21 ether
+        assertEq(bob.balance, 21 ether);
+        // Cat received 10 ether from the JIT bounty (no decay), 1 + 10 = 11 ether
+        assertEq(cat.balance, 11 ether);
         // Cat's token0 balance reduced by 1 after swap
         assertEq(token0.balanceOf(cat), 9999 ether);
     }

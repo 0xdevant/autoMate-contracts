@@ -192,7 +192,7 @@ contract AutoMateSetup is Test, Deployers {
                         TEST UTILS
     //////////////////////////////////////////////////////////////*/
     /// @dev subscribe Native Transfer task with specific user
-    function subscribeNativeTransferTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
+    function subscribeNativeTransferTaskBy(address subscriber, uint256 bounty, uint256 transferAmount, address receiver)
         public
         userPrank(subscriber)
         returns (uint256 id)
@@ -201,7 +201,7 @@ contract AutoMateSetup is Test, Deployers {
         bytes memory taskInfo = abi.encode(
             bounty,
             IAutoMate.TaskType.NATIVE_TRANSFER,
-            address(token0),
+            receiver,
             uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
             ZERO_BYTES
@@ -309,7 +309,7 @@ contract AutoMateSetup is Test, Deployers {
     {
         vm.warp(swapTime);
 
-        IAutoMate.ClaimBounty memory claimBounty = IAutoMate.ClaimBounty({receiver: cat});
+        IAutoMate.ClaimBounty memory claimBounty = IAutoMate.ClaimBounty({receiver: searcher});
         bytes memory sig =
             getEIP712Signature(claimBounty, userPrivateKeys[userIds[searcher]], autoMate.DOMAIN_SEPARATOR());
         bytes memory encodedHookData = abi.encode(claimBounty, sig);
