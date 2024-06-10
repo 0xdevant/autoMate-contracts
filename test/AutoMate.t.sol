@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
+import "forge-std/console2.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
 
@@ -10,6 +11,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
@@ -54,6 +56,23 @@ contract TestAutoMate is AutoMateSetup {
     function test_setHookAddress_OwnerCanSetHookAddress() public {
         autoMate.setHookAddress(address(1));
         assertEq(autoMate.getHookAddress(), address(1));
+    }
+
+    function test_setBountyDecayBPPerMinute_RevertIfNotOwnerSetBountyDecayBPPerMinute() public {
+        vm.prank(address(1));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(1)));
+        autoMate.setBountyDecayBPPerMinute(1000);
+    }
+
+    function test_setBountyDecayBPPerMinute_RevertIfDecayBPIsLargerThan10000() public {
+        vm.expectRevert(IAutoMate.InvalidBountyDecayBPPerMinute.selector);
+        autoMate.setBountyDecayBPPerMinute(10001);
+    }
+
+    function test_setBountyDecayBPPerMinute_OwnerCanSetBountyDecayBPPerMinute() public {
+        assertEq(autoMate.getBountyDecayBPPerMinute(), 100);
+        autoMate.setBountyDecayBPPerMinute(1000);
+        assertEq(autoMate.getBountyDecayBPPerMinute(), 1000);
     }
 
     function test_setProtocolFeeBP_RevertIfNotOwnerSetProtocolFeeBP() public {
@@ -126,6 +145,10 @@ contract TestAutoMate is AutoMateSetup {
 
     function test_getHookAddress_CanGetHookAddress() public view {
         assertEq(autoMate.getHookAddress(), address(autoMateHook));
+    }
+
+    function test_getBountyDecayBPPerMinute_CanGetBountyDecayBPPerMinute() public view {
+        assertEq(autoMate.getBountyDecayBPPerMinute(), 100);
     }
 
     function test_getProtocolFeeBP_CanGetProtocolFeeBP() public view {

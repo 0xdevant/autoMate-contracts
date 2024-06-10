@@ -176,7 +176,7 @@ contract AutoMateSetup is Test, Deployers {
             defaultBounty,
             IAutoMate.TaskType.ERC20_TRANSFER,
             address(token0),
-            uint64(block.timestamp + 1 hours),
+            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
             transferAmount,
             abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
