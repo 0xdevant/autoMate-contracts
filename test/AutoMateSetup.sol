@@ -178,7 +178,7 @@ contract AutoMateSetup is Test, Deployers {
             address(token0),
             uint64(block.timestamp + 60),
             transferAmount,
-            abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount))
+            abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
 
         IERC20(address(token0)).approve(address(autoMate), transferAmount);

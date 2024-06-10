@@ -89,9 +89,9 @@ contract TestAutoMate is AutoMateSetup {
 
         // No tasks before subscribing
         assertEq(tasks.length, 0);
-        subscribeTaskBy(address(this), 1000 ether);
+        subscribeTaskBy(address(this), defaultTransferAmount);
 
-        uint256 callAmount = 1000 ether;
+        uint256 callAmount = defaultTransferAmount;
         uint64 scheduleAt = uint64(block.timestamp + 60);
 
         tasks = autoMate.getTasks();
@@ -106,13 +106,13 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.callingAddress, address(token0));
         assertEq(task.scheduleAt, scheduleAt);
         assertEq(task.callAmount, callAmount);
-        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, 1 ether)));
+        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount)));
     }
 
     function test_getTask_CanGetTaskDetails() public {
-        subscribeTaskBy(address(this), 1000 ether);
+        subscribeTaskBy(address(this), defaultTransferAmount);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
-        uint256 callAmount = 1000 ether;
+        uint256 callAmount = defaultTransferAmount;
         uint64 scheduleAt = uint64(block.timestamp + 60);
 
         assertEq(task.id, taskId);
@@ -122,7 +122,7 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.callingAddress, address(token0));
         assertEq(task.scheduleAt, scheduleAt);
         assertEq(task.callAmount, callAmount);
-        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, 1 ether)));
+        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount)));
     }
 
     function test_getHookAddress_CanGetHookAddress() public view {
