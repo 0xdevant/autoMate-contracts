@@ -456,6 +456,31 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(cat), 9999 ether);
     }
 
+    function test_executeTask_SwapWontExecuteTaskWhenTaskExpired() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        // Before subscription
+        assertEq(alice.balance, 110 ether);
+        subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+        // After subscription = 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
+
+        // Expire by 1 second
+        swapToken(cat, block.timestamp + 1 hours + 1, true, -1e18);
+
+        // Task wasn't executed, balance remains the same
+        assertEq(alice.balance, 79 ether);
+        // Bob didn't receive 20 eth, remain at 1 eth balance
+        assertEq(bob.balance, 1 ether);
+        // Cat didn't receive bounty, remain at 1 eth balance
+        assertEq(cat.balance, 1 ether);
+        // Cat's token0 balance reduced by 1 after swap
+        assertEq(token0.balanceOf(cat), 9999 ether);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             REDEEM EXPIRED TASK
     //////////////////////////////////////////////////////////////*/
