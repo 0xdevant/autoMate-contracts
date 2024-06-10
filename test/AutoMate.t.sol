@@ -33,9 +33,25 @@ contract TestAutoMate is AutoMateSetup {
                             TASKS RELATED
     //////////////////////////////////////////////////////////////*/
     function test_subscribeTask_CanSubscribeTask() public {
-        taskId = subscribeTaskBy(alice, 1000 ether);
+        uint256 scheduledTransferAmount = 1000 ether;
+
+        assertEq(alice.balance, 110 ether);
+        assertEq(token0.balanceOf(alice), 10000 ether);
+        taskId = subscribeTaskBy(alice, scheduledTransferAmount);
         assertEq(taskId, 0);
         assertEq(alice.balance, 0);
+        assertEq(token0.balanceOf(alice), 9000 ether);
+
+        IAutoMate.Task memory task = autoMate.getTask(taskId);
+
+        assertEq(task.id, taskId);
+        assertEq(task.subscriber, alice);
+        assertEq(task.jitBounty, defaultBounty);
+        assertEq(uint256(task.taskType), uint256(IAutoMate.TaskType.ERC20_TRANSFER));
+        assertEq(task.callingAddress, address(token0));
+        assertEq(task.scheduleAt, defaultScheduleAt); // 1 hour from now
+        assertEq(task.callAmount, scheduledTransferAmount);
+        assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, scheduledTransferAmount)));
     }
 
     function test_executeTask_RevertIfNotExecutedFromHook() public {
@@ -44,7 +60,7 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.executeTask("");
     }
 
-    function test_executeTask_SwapCanTriggerTaskExecutionAndDistributeJITBounty() public {
+    function test_executeTask_SwapCanTriggerTaskExecutionAndClaimAllJITBounty() public {
         // Alice balance before subscription
         assertEq(alice.balance, 110 ether);
         assertEq(token0.balanceOf(alice), 10000 ether);
@@ -155,9 +171,6 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(tasks.length, 0);
         subscribeTaskBy(address(this), defaultTransferAmount);
 
-        uint256 callAmount = defaultTransferAmount;
-        uint64 scheduleAt = defaultScheduleAt;
-
         tasks = autoMate.getTasks();
 
         // Should have 1 task after subscribing
@@ -168,24 +181,22 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.jitBounty, defaultBounty);
         assertEq(uint256(task.taskType), uint256(IAutoMate.TaskType.ERC20_TRANSFER));
         assertEq(task.callingAddress, address(token0));
-        assertEq(task.scheduleAt, scheduleAt);
-        assertEq(task.callAmount, callAmount);
+        assertEq(task.scheduleAt, defaultScheduleAt);
+        assertEq(task.callAmount, defaultTransferAmount);
         assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount)));
     }
 
     function test_getTask_CanGetTaskDetails() public {
         subscribeTaskBy(address(this), defaultTransferAmount);
         IAutoMate.Task memory task = autoMate.getTask(taskId);
-        uint256 callAmount = defaultTransferAmount;
-        uint64 scheduleAt = defaultScheduleAt;
 
         assertEq(task.id, taskId);
         assertEq(task.subscriber, address(this));
         assertEq(task.jitBounty, defaultBounty);
         assertEq(uint256(task.taskType), uint256(IAutoMate.TaskType.ERC20_TRANSFER));
         assertEq(task.callingAddress, address(token0));
-        assertEq(task.scheduleAt, scheduleAt);
-        assertEq(task.callAmount, callAmount);
+        assertEq(task.scheduleAt, defaultScheduleAt); // 1 hour later
+        assertEq(task.callAmount, defaultTransferAmount); // 10000 ether
         assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, defaultTransferAmount)));
     }
 
