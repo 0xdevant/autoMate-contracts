@@ -244,6 +244,10 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         return _hookAddress;
     }
 
+    function getBountyDecayBPPerMinute() external view returns (uint16) {
+        return _bountyDecayBPPerMinute;
+    }
+
     function getProtocolFeeBP() external view returns (uint16) {
         return _protocolFeeBP;
     }
