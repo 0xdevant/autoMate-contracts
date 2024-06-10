@@ -25,6 +25,7 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IAutoMate} from "src/interfaces/IAutoMate.sol";
+import {Disperse} from "test/mock/Disperse.sol";
 
 contract TestAutoMate is AutoMateSetup {
     using PoolIdLibrary for PoolKey;
@@ -117,6 +118,19 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: bounty}(taskInfo);
     }
 
+    function test_subscribeTask_CanSubscribeNativeTransferTask() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        assertEq(alice.balance, 110 ether);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount);
+        assertEq(taskId, 0);
+        // 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
+    }
+
     function test_subscribeTask_CanSubscribeERC20TransferTask() public {
         uint256 scheduledTransferAmount = 1000 ether;
 
@@ -139,15 +153,34 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, scheduledTransferAmount)));
     }
 
-    function test_subscribeTask_CanSubscribeNativeTransferTask() public {
+    function test_subscribeTask_CanSubscribeContractCallWithNativeTask() public {
         // Bounty 10 ether -> Protocol fee 1 ether (10%)
         uint256 bounty = 10 ether;
-        // Task: Transfer 20 ETH to bob
-        uint256 scheduledTransferAmount = 20 ether;
+        // Task: Disperse 10, 20, 30 eth to bob, cat, derek respectively
+        uint256 scheduledTransferAmount = 60 ether;
 
         assertEq(alice.balance, 110 ether);
-        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount);
+        taskId = subscribeContractCallWithNativeTaskBy(alice, bounty, scheduledTransferAmount);
         assertEq(taskId, 0);
+        // 110 - 10 - 1 - 60
+        assertEq(alice.balance, 39 ether);
+    }
+
+    function test_subscribeTask_CanSubscribeContractCallWithERC20Task() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Disperse 10, 20, 30 ether to bob, cat, derek respectively
+        uint256 scheduledTransferAmount = 60 ether;
+
+        assertEq(token0.balanceOf(alice), 10000 ether);
+
+        taskId = subscribeContractCallWithERC20TaskBy(alice, bounty, scheduledTransferAmount);
+        assertEq(taskId, 0);
+        // 110 - 11
+        assertEq(alice.balance, 99 ether);
+        assertEq(token0.balanceOf(alice), 9940 ether);
+    }
+
         // 110 - 10 - 1 - 20
         assertEq(alice.balance, 79 ether);
     }

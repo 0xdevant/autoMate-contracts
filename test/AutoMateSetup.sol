@@ -21,6 +21,8 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {AutoMateHook} from "src/AutoMateHook.sol";
 import {AutoMate} from "src/AutoMate.sol";
 
+import {Disperse} from "test/mock/Disperse.sol";
+
 import "src/interfaces/IAutoMate.sol";
 
 contract AutoMateSetup is Test, Deployers {
@@ -35,6 +37,7 @@ contract AutoMateSetup is Test, Deployers {
     AutoMate public autoMate;
     AutoMateHook public autoMateHook;
     PoolId public poolId;
+    Disperse public disperse;
 
     uint256 private constant _BASIS_POINTS = 10000;
     bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
@@ -48,9 +51,11 @@ contract AutoMateSetup is Test, Deployers {
 
     // Users
     mapping(uint256 userId => uint256 privateKey) public userPrivateKeys;
+    mapping(uint256 userId => uint256 disperseAmount) public disperseAmounts;
     address public alice;
     address public bob;
     address public cat;
+    address public derek;
 
     // For AutoMate test cases
     uint256 taskId;
@@ -137,21 +142,33 @@ contract AutoMateSetup is Test, Deployers {
 
         // 8) Set up users
         setUpUsers();
+
+        // 9) Deploy Disperse contract for other kinds of contract calls in tasks
+        disperse = new Disperse();
     }
 
     function setUpUsers() public {
         // Private Keys
-        userPrivateKeys[0] = 1;
-        userPrivateKeys[1] = 2;
-        userPrivateKeys[2] = 3;
+        userPrivateKeys[0] = 1; // alice
+        userPrivateKeys[1] = 2; // bob
+        userPrivateKeys[2] = 3; // cat
+        userPrivateKeys[3] = 4; // derek
+
+        // Disperse Amounts (For disperse tasks)
+        disperseAmounts[0] = 5 ether;
+        disperseAmounts[1] = 10 ether;
+        disperseAmounts[2] = 20 ether;
+        disperseAmounts[3] = 30 ether;
 
         // Addresses
         alice = vm.addr(userPrivateKeys[0]);
         bob = vm.addr(userPrivateKeys[1]);
         cat = vm.addr(userPrivateKeys[2]);
+        derek = vm.addr(userPrivateKeys[3]);
         vm.label(alice, "alice");
         vm.label(bob, "bob");
         vm.label(cat, "cat");
+        vm.label(derek, "derek");
 
         // ETH distribution
         deal(alice, 110 ether);
@@ -181,7 +198,7 @@ contract AutoMateSetup is Test, Deployers {
             abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
 
-        IERC20(address(token0)).approve(address(autoMate), transferAmount);
+        token0.approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), 0);
         id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
@@ -205,6 +222,69 @@ contract AutoMateSetup is Test, Deployers {
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), 0);
         id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
+    }
+
+    function subscribeContractCallWithNativeTaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
+        address[] memory recipients = new address[](3);
+        recipients[0] = bob;
+        recipients[1] = cat;
+        recipients[2] = derek;
+
+        // 10 eth to bob; 20 eth to cat; 30 eth to derek
+        uint256[] memory values = new uint256[](3);
+        values[0] = disperseAmounts[1];
+        values[1] = disperseAmounts[2];
+        values[2] = disperseAmounts[3];
+
+        protocolFee = (bounty * defaultProtocolFeeBP) / _BASIS_POINTS;
+        bytes memory taskInfo = abi.encode(
+            bounty,
+            IAutoMate.TaskType.CONTRACT_CALL_WITH_NATIVE,
+            address(token0),
+            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            transferAmount,
+            abi.encodeCall(Disperse.disperseEther, (recipients, values))
+        );
+
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
+    }
+
+    function subscribeContractCallWithERC20TaskBy(address subscriber, uint256 bounty, uint256 transferAmount)
+        public
+        userPrank(subscriber)
+        returns (uint256 id)
+    {
+        address[] memory recipients = new address[](3);
+        recipients[0] = bob;
+        recipients[1] = cat;
+        recipients[2] = derek;
+
+        // 10 to bob; 20 to cat; 30 to derek
+        uint256[] memory values = new uint256[](3);
+        values[0] = disperseAmounts[1];
+        values[1] = disperseAmounts[2];
+        values[2] = disperseAmounts[3];
+
+        protocolFee = (bounty * defaultProtocolFeeBP) / _BASIS_POINTS;
+        bytes memory taskInfo = abi.encode(
+            bounty,
+            IAutoMate.TaskType.CONTRACT_CALL_WITH_ERC20,
+            address(token0),
+            uint64(block.timestamp + 1 hours), // Scheduled at 1 hour from now
+            transferAmount,
+            abi.encodeCall(Disperse.disperseToken, (address(token0), recipients, values))
+        );
+
+        token0.approve(address(autoMate), transferAmount);
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        id = autoMate.subscribeTask{value: bounty + protocolFee}(taskInfo);
     }
 
     /// @dev get EIP712 signature for a receiver
