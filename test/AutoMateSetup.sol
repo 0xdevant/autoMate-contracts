@@ -12,6 +12,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
@@ -52,6 +53,7 @@ contract AutoMateSetup is Test, Deployers {
     // Users
     mapping(uint256 userId => uint256 privateKey) public userPrivateKeys;
     mapping(uint256 userId => uint256 disperseAmount) public disperseAmounts;
+    mapping(address userAddress => uint256 userId) public userIds;
     address public alice;
     address public bob;
     address public cat;
@@ -169,6 +171,12 @@ contract AutoMateSetup is Test, Deployers {
         vm.label(bob, "bob");
         vm.label(cat, "cat");
         vm.label(derek, "derek");
+
+        // User IDs
+        userIds[alice] = 0;
+        userIds[bob] = 1;
+        userIds[cat] = 2;
+        userIds[derek] = 3;
 
         // ETH distribution
         deal(alice, 110 ether);
@@ -288,6 +296,33 @@ contract AutoMateSetup is Test, Deployers {
         vm.expectEmit(address(autoMate));
         emit IAutoMate.TaskSubscribed(address(subscriber), 0);
         id = autoMate.subscribeTask{value: bounty + protocolFee}(taskInfo);
+    }
+
+    /// @dev swap token to trigger executeTask
+    // @param searcher Address of the user who will perform the swap and receive the JIT Bounty
+    // @param swapTime Timing for swap (Determines the bounty decay)
+    // @param zeroForOne Whether to swap token0 for token1 or vice versa
+    // @param amountSpecified Amount to swap; positives indicate exact output swap; negatives indicate exact input swap
+    function swapToken(address searcher, uint256 swapTime, bool zeroForOne, int256 amountSpecified)
+        public
+        userPrank(searcher)
+    {
+        vm.warp(swapTime);
+
+        IAutoMate.ClaimBounty memory claimBounty = IAutoMate.ClaimBounty({receiver: cat});
+        bytes memory sig =
+            getEIP712Signature(claimBounty, userPrivateKeys[userIds[searcher]], autoMate.DOMAIN_SEPARATOR());
+        bytes memory encodedHookData = abi.encode(claimBounty, sig);
+
+        if (zeroForOne) {
+            token0.approve(address(swapRouter), type(uint256).max);
+        } else {
+            token1.approve(address(swapRouter), type(uint256).max);
+        }
+        vm.expectEmit(address(autoMate));
+        emit IAutoMate.TaskExecuted(searcher, 0);
+        BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, encodedHookData);
+        assertEq(int256(swapDelta.amount0()), amountSpecified);
     }
 
     /// @dev get EIP712 signature for a receiver
