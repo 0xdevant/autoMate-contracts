@@ -209,8 +209,10 @@ contract AutoMateSetup is Test, Deployers {
             ZERO_BYTES
         );
 
+        uint256 expectedTaskId = _getExpectedTaskId();
+
         vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        emit IAutoMate.TaskSubscribed(address(subscriber), expectedTaskId);
         id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
     }
 
@@ -230,9 +232,11 @@ contract AutoMateSetup is Test, Deployers {
             abi.encodeCall(IERC20.transfer, (bob, transferAmount))
         );
 
+        uint256 expectedTaskId = _getExpectedTaskId();
+
         token0.approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        emit IAutoMate.TaskSubscribed(address(subscriber), expectedTaskId);
         id = autoMate.subscribeTask{value: defaultBounty + protocolFee}(taskInfo);
     }
 
@@ -264,8 +268,10 @@ contract AutoMateSetup is Test, Deployers {
             abi.encodeCall(Disperse.disperseEther, (recipients, values))
         );
 
+        uint256 expectedTaskId = _getExpectedTaskId();
+
         vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        emit IAutoMate.TaskSubscribed(address(subscriber), expectedTaskId);
         id = autoMate.subscribeTask{value: bounty + protocolFee + transferAmount}(taskInfo);
     }
 
@@ -297,10 +303,17 @@ contract AutoMateSetup is Test, Deployers {
             abi.encodeCall(Disperse.disperseToken, (address(token0), recipients, values))
         );
 
+        uint256 expectedTaskId = _getExpectedTaskId();
+
         token0.approve(address(autoMate), transferAmount);
         vm.expectEmit(address(autoMate));
-        emit IAutoMate.TaskSubscribed(address(subscriber), 0);
+        emit IAutoMate.TaskSubscribed(address(subscriber), expectedTaskId);
         id = autoMate.subscribeTask{value: bounty + protocolFee}(taskInfo);
+    }
+
+    function _getExpectedTaskId() private view returns (uint256 expectedTaskId) {
+        uint256 numOfTask = autoMate.getNumOfTasks();
+        if (numOfTask != 0) expectedTaskId = numOfTask;
     }
 
     /// @dev swap token to trigger executeTask

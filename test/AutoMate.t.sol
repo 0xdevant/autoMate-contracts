@@ -213,6 +213,28 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(alice), 9940 ether);
     }
 
+    function test_subscribeTask_CanSubscribeMoreThanOneTask() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        assertEq(alice.balance, 110 ether);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+        assertEq(taskId, 0);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, 30 ether, cat);
+        assertEq(taskId, 1);
+        assertEq(feeAdmin.balance, 2 ether); // 10% fee of 10 ether * 2
+        // 110 - (10 - 1 - 20) - (10 - 1 - 30)
+        assertEq(alice.balance, 38 ether);
+
+        IAutoMate.Task memory task = autoMate.getTask(taskId);
+
+        assertEq(task.id, taskId);
+        assertEq(task.callAmount, 30 ether);
+        assertEq(task.callingAddress, cat);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             TASK EXECUTION
     //////////////////////////////////////////////////////////////*/
