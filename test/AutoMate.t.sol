@@ -139,28 +139,23 @@ contract TestAutoMate is AutoMateSetup {
         autoMate.subscribeTask{value: bounty}(taskInfo);
     }
 
-    function test_subscribeTask_CanSubscribeNativeTransferTask() public {
-        // Bounty 10 ether -> Protocol fee 1 ether (10%)
-        uint256 bounty = 10 ether;
-        // Task: Transfer 20 ETH to bob
-        uint256 scheduledTransferAmount = 20 ether;
-
-        assertEq(alice.balance, 110 ether);
-        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
-        assertEq(taskId, 0);
-        // 110 - 10 - 1 - 20
-        assertEq(alice.balance, 79 ether);
-    }
-
+    /// @notice Detailed walkthrough of how eth/tokens are transferred in subscribeTask
     function test_subscribeTask_CanSubscribeERC20TransferTask() public {
         uint256 scheduledTransferAmount = 1000 ether;
 
         assertEq(alice.balance, 110 ether);
         assertEq(token0.balanceOf(alice), 10000 ether);
+        // Default bounty = 100 ether
+        // Protocol fee = 10 ether (10%)
+        // Task: Transfer 1000 token0 to Bob, schedule at 1 hour later
         taskId = subscribeERC20TransferTaskBy(alice, scheduledTransferAmount);
         assertEq(taskId, 0);
+
+        // Transferred 100 eth (Bounty) + 10 eth (Protocol fee) => 0 eth remaining
         assertEq(alice.balance, 0);
+        // Transferred 1000 units of token0 to AutoMate contract for task execution
         assertEq(token0.balanceOf(alice), 9000 ether);
+        assertEq(feeAdmin.balance, 10 ether); // 10% fee of 100 ether
 
         IAutoMate.Task memory task = autoMate.getTask(taskId);
 
@@ -174,6 +169,20 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(task.callData, abi.encodeCall(IERC20.transfer, (bob, scheduledTransferAmount)));
     }
 
+    function test_subscribeTask_CanSubscribeNativeTransferTask() public {
+        // Bounty 10 ether -> Protocol fee 1 ether (10%)
+        uint256 bounty = 10 ether;
+        // Task: Transfer 20 ETH to bob
+        uint256 scheduledTransferAmount = 20 ether;
+
+        assertEq(alice.balance, 110 ether);
+        taskId = subscribeNativeTransferTaskBy(alice, bounty, scheduledTransferAmount, bob);
+        assertEq(feeAdmin.balance, 1 ether); // 10% fee of 10 ether
+        assertEq(taskId, 0);
+        // 110 - 10 - 1 - 20
+        assertEq(alice.balance, 79 ether);
+    }
+
     function test_subscribeTask_CanSubscribeContractCallWithNativeTask() public {
         // Bounty 10 ether -> Protocol fee 1 ether (10%)
         uint256 bounty = 10 ether;
@@ -182,6 +191,7 @@ contract TestAutoMate is AutoMateSetup {
 
         assertEq(alice.balance, 110 ether);
         taskId = subscribeContractCallWithNativeTaskBy(alice, bounty, scheduledTransferAmount);
+        assertEq(feeAdmin.balance, 1 ether); // 10% fee of 10 ether
         assertEq(taskId, 0);
         // 110 - 10 - 1 - 60
         assertEq(alice.balance, 39 ether);
@@ -196,6 +206,7 @@ contract TestAutoMate is AutoMateSetup {
         assertEq(token0.balanceOf(alice), 10000 ether);
 
         taskId = subscribeContractCallWithERC20TaskBy(alice, bounty, scheduledTransferAmount);
+        assertEq(feeAdmin.balance, 1 ether); // 10% fee of 10 ether
         assertEq(taskId, 0);
         // 110 - 11
         assertEq(alice.balance, 99 ether);
@@ -231,7 +242,7 @@ contract TestAutoMate is AutoMateSetup {
         vm.stopPrank();
     }
 
-    /// @notice Detailed walkthrough of how eth/tokens are transferred
+    /// @notice Detailed walkthrough of how eth/tokens are transferred in executeTask
     function test_executeTask_SwapCanTriggerTaskExecutionAndClaimAllBounty() public {
         // Alice balance before subscription
         assertEq(alice.balance, 110 ether);
@@ -380,6 +391,12 @@ contract TestAutoMate is AutoMateSetup {
     /*//////////////////////////////////////////////////////////////
                                  ADMIN
     //////////////////////////////////////////////////////////////*/
+    function test_setFeeReceiver_CanSetFeeReceiver() public {
+        assertEq(autoMate.getFeeReceiver(), feeAdmin);
+        autoMate.setFeeReceiver(alice);
+        assertEq(autoMate.getFeeReceiver(), alice);
+    }
+
     function test_setHookAddress_RevertIfNotOwnerSetHookAddress() public {
         vm.prank(address(1));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(1)));
@@ -429,6 +446,12 @@ contract TestAutoMate is AutoMateSetup {
         assertTrue(autoMate.hasPendingTask());
     }
 
+    function test_hasActiveTask_ReturnTrueIfThereIsActiveTask() public {
+        assertFalse(autoMate.hasActiveTask());
+        subscribeERC20TransferTaskBy(address(this), 1000 ether);
+        assertTrue(autoMate.hasActiveTask());
+    }
+
     function test_getNumOfTasks_CanGetNumOfTasks() public {
         assertEq(autoMate.getNumOfTasks(), 0);
         subscribeERC20TransferTaskBy(address(this), 1000 ether);
@@ -473,6 +496,10 @@ contract TestAutoMate is AutoMateSetup {
 
     function test_getHookAddress_CanGetHookAddress() public view {
         assertEq(autoMate.getHookAddress(), address(autoMateHook));
+    }
+
+    function test_getFeeReceiver_CanGetFeeReceiver() public view {
+        assertEq(autoMate.getFeeReceiver(), feeAdmin);
     }
 
     function test_getBountyDecayBPPerMinute_CanGetBountyDecayBPPerMinute() public view {

@@ -54,6 +54,7 @@ contract AutoMateSetup is Test, Deployers {
     mapping(uint256 userId => uint256 privateKey) public userPrivateKeys;
     mapping(uint256 userId => uint256 disperseAmount) public disperseAmounts;
     mapping(address userAddress => uint256 userId) public userIds;
+    address public feeAdmin = vm.addr(9999);
     address public alice;
     address public bob;
     address public cat;
@@ -90,7 +91,7 @@ contract AutoMateSetup is Test, Deployers {
         token1 = MockERC20(Currency.unwrap(currency1));
 
         // 3) Deploy our AutoMate contract
-        autoMate = new AutoMate(1000, 100); // 10% fee, 1% decay per min
+        autoMate = new AutoMate(1000, 100, feeAdmin); // 10% fee, 1% decay per min
 
         // 4) Deploy Hook contract to specified address
         address hookAddress = address(uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG));

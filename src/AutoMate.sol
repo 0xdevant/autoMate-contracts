@@ -30,6 +30,8 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     /// @dev 1% decay on jitBounty per minute based on how close the execution time is to the scheduled time
     uint16 private _bountyDecayBPPerMinute;
 
+    address private _feeReceiver;
+
     modifier onlyFromHook() {
         if (msg.sender != _hookAddress) {
             revert OnlyFromAuthorizedHook();
@@ -37,12 +39,13 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
         _;
     }
 
-    constructor(uint16 protocolFeeBP, uint16 bountyDecayBPPerMinute)
+    constructor(uint16 protocolFeeBP, uint16 bountyDecayBPPerMinute, address feeReceiver)
         Ownable(msg.sender)
         AutoMateEIP712("AutoMate", "1")
     {
         _protocolFeeBP = protocolFeeBP;
         _bountyDecayBPPerMinute = bountyDecayBPPerMinute;
+        _feeReceiver = feeReceiver;
     }
 
     function subscribeTask(bytes calldata taskInfo) external payable returns (uint256 taskId) {
@@ -136,6 +139,8 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
             minRequiredAmount += callAmount;
         }
         if (msg.value != minRequiredAmount) revert InsufficientSetupFunds();
+        // Transfer fee to feeAdmin
+        payable(_feeReceiver).transfer(protocolFee);
 
         if (taskType == TaskType.ERC20_TRANSFER || taskType == TaskType.CONTRACT_CALL_WITH_ERC20) {
             IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), callAmount);
@@ -221,8 +226,8 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     /*//////////////////////////////////////////////////////////////
                                  ADMIN
     //////////////////////////////////////////////////////////////*/
-    function withdrawFee(address feeReceiver) external onlyOwner {
-        payable(feeReceiver).transfer(address(this).balance);
+    function setFeeReceiver(address feeReceiver) external onlyOwner {
+        _feeReceiver = feeReceiver;
     }
 
     function setHookAddress(address hookAddress) external onlyOwner {
@@ -268,6 +273,10 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
 
     function getTask(uint256 taskIndex) external view returns (Task memory) {
         return _tasks[taskIndex];
+    }
+
+    function getFeeReceiver() external view returns (address) {
+        return _feeReceiver;
     }
 
     function getHookAddress() external view returns (address) {
