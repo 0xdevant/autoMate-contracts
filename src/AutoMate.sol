@@ -18,6 +18,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     bytes32 private constant _CLAIM_BOUNTY_TYPEHASH = keccak256("ClaimBounty(address receiver)");
     uint256 private constant _BASIS_POINTS = 10000;
     uint256 private constant _MIN_BOUNTY = 0.01 ether;
+    uint256 private constant _FULLLY_DECAYED_IN_MINUTES = 100;
 
     Task[] private _tasks;
     /// @dev This is to save gas from needing to loop through expired tasks to get the next active task index, since there could be expired tasks still being stored in the array
@@ -165,6 +166,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
                 // find the starting index of active tasks
                 if (!foundActive) {
                     smallestGap = _tasks[i].scheduleAt - block.timestamp;
+                    cloestToJITIdx = i;
                     activeStartingIdx = i;
                     foundActive = true;
                 }
@@ -202,7 +204,7 @@ contract AutoMate is Ownable, AutoMateEIP712, IAutoMate {
     {
         // block.timestamp must be <= task.scheduleAt at this point
         uint256 minsBeforeJIT = (task.scheduleAt - block.timestamp) / 1 minutes;
-        uint256 finalBounty = minsBeforeJIT >= 100
+        uint256 finalBounty = minsBeforeJIT >= _FULLLY_DECAYED_IN_MINUTES
             ? 0
             : task.jitBounty - (task.jitBounty * minsBeforeJIT * _bountyDecayBPPerMinute / _BASIS_POINTS);
 
